@@ -1,0 +1,55 @@
+# ───────────────────────────────────────────────────────────────────
+# .gitignore — files that MUST NEVER be committed
+# ───────────────────────────────────────────────────────────────────
+
+# ── Python ──────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.spec
+.venv/
+venv/
+
+# ── Desktop builds (PyInstaller output) ─────────────────────────
+desktop/dist/
+desktop/build/
+
+# ── Config with API keys (never commit!) ───────────────────────
+desktop/config.yaml
+**/config.yaml
+
+# ── Android ────────────────────────────────────────────────────
+*.iml
+.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+
+# ── iOS ────────────────────────────────────────────────────────
+*.xcworkspace/
+*.xcuserdata/
+ios/DerivedData/
+ios/Pods/
+ios/*.xcodeproj/xcuserdata/
+
+# ── OS files ───────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# ── IDE ─────────────────────────────────────────────────────────
+.vscode/
+.idea/
+
+# ── Environment / secrets ──────────────────────────────────────
+.env
+*.env.local
+
+# ── Agent instructions (never commit) ──────────────────────────
+AGENTS.md
+PROJECT_CHECKLIST.md

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDisplayName</key>
+    <string>Make It So</string>
+    <key>CFBundleName</key>
+    <string>MakeItSo</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.landonkea.MakeItSo</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category-productivity</string>
+    <key>UIRequiredDeviceCapabilities</key>
+    <array>
+        <string>arm64</string>
+        <string>microphone</string>
+    </array>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Make It So needs speech recognition to hear your commands after you say "Computer".</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Make It So needs the microphone to listen for the wake word "Computer" and to record your commands.</string>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+    </array>
+    <key>LSApplicationQueriesSchemes</key>
+    <array>
+        <string>sms</string>
+        <string>tel</string>
+    </array>
+</dict>
+</plist>

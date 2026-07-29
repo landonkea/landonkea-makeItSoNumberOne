@@ -1,0 +1,53 @@
+# ───────────────────────────────────────────────────────────────────
+# config.example.yaml — copy this to config.yaml and add your keys
+# ───────────────────────────────────────────────────────────────────
+# This file contains all the settings for Make It So Number One.
+# To use it:
+#   1. Copy this file to config.yaml:
+#      cp config.example.yaml config.yaml
+#   2. Fill in your API keys (get them from the websites below).
+#   3. NEVER commit config.yaml (it's in .gitignore).
+#
+# REQUIRED API KEYS
+# -----------------
+# 1. ANTHROPIC (Claude AI brain):
+#    https://console.anthropic.com/ → Create API Key
+#
+# 2. OPENAI (Whisper speech-to-text):
+#    https://platform.openai.com/api-keys → Create API Key
+#
+# 3. PICOVOICE (wake word "Computer"):
+#    https://console.picovoice.ai/ → Sign up (free) → AccessKey
+# ───────────────────────────────────────────────────────────────────
+
+# ── Claude API (the brain that understands your requests) ─────────
+# This is REQUIRED. The app won't work without it.
+anthropic_api_key: ""
+
+# ── OpenAI API (converts your speech to text) ─────────────────────
+# This is REQUIRED. Without it, the app can't hear you.
+openai_api_key: ""
+
+# ── Picovoice Porcupine (wake word detection) ────────────────────
+# This is REQUIRED. Without it, the app can't listen for "Computer".
+porcupine_access_key: ""
+
+# ── Voice settings ────────────────────────────────────────────────
+tts:
+  # macOS voice name (run `say -v '?'` in terminal to list all).
+  voice: "Samantha"
+
+  # Speaking rate (words per minute). 200 is normal.
+  rate: 200
+
+# ── Behavior settings ─────────────────────────────────────────────
+settings:
+  # Maximum recording time in seconds (prevents infinite recording
+  # in noisy environments).
+  max_record_seconds: 10
+
+  # How long of silence (in seconds) means the user stopped talking.
+  silence_timeout: 1.5
+
+  # Keep this many previous messages for conversation context.
+  max_history: 20

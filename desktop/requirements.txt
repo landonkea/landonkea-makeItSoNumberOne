@@ -1,0 +1,34 @@
+# ───────────────────────────────────────────────────────────────────
+# requirements.txt — all Python libraries needed for development
+# ───────────────────────────────────────────────────────────────────
+# These are installed during development to build the app.
+# End users DON'T install these — they run the standalone .exe/.app.
+#
+# To install:  pip install -r requirements.txt
+# ───────────────────────────────────────────────────────────────────
+
+# ── Wake word detection ──────────────────────────────────────────
+# Detects "Computer" on the microphone. Tiny, fast, offline.
+pvporcupine>=3.0.0
+
+# ── Microphone access ────────────────────────────────────────────
+# Reads audio from the microphone on all platforms.
+pyaudio>=0.2.13
+
+# ── AI API calls ─────────────────────────────────────────────────
+# Sends HTTP requests to OpenAI (Whisper) and Anthropic (Claude).
+requests>=2.31.0
+
+# ── Configuration ────────────────────────────────────────────────
+# Reads config.yaml (YAML files are easy to read and edit).
+pyyaml>=6.0
+
+# ── System control (optional, for mouse/keyboard actions) ───────
+# Controls the mouse and keyboard programmatically.
+# Uncomment if you want Claude to click, type, and control your PC.
+# pyautogui>=0.9.54
+
+# ── PyInstaller (builds the standalone executable) ──────────────
+# Packages everything into one file you can share with anyone.
+# Uncomment when you're ready to build:
+# pyinstaller>=6.0

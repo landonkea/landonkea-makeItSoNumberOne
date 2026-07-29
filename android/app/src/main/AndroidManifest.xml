@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ───────────────────────────────────────────────────────────────
+     AndroidManifest.xml — tells Android what the app can do
+     ───────────────────────────────────────────────────────────────
+     This is the "ID card" for the app. It declares:
+       1. What permissions the app needs (microphone, internet, etc.)
+       2. What screens (Activities) the app has
+       3. What the app looks like (icon, name, theme)
+     ─────────────────────────────────────────────────────────────── -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- ── Permissions ───────────────────────────────────────────
+         These are things the app asks the user for.
+         Android will ask the user to approve them at install time
+         or at runtime (for dangerous ones like microphone). -->
+
+    <!-- RECORD_AUDIO: We need the microphone to hear "Computer"
+         and to record the user's speech for transcription. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- INTERNET: We need internet access to call Claude's API
+         (Anthropic) and Whisper API (OpenAI). -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- ── Application definition ────────────────────────────────
+         This describes the app to Android: its name, icon, theme,
+         and what screens/activities it contains. -->
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="Make It So"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.MakeItSo">
+
+        <!-- ── Main Activity ─────────────────────────────────
+             This is the first screen that shows when the user
+             opens the app. It's the "home screen" where they
+             can see status, settings, and the wake word state. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.MakeItSo">
+            <intent-filter>
+                <!-- This makes MainActivity the "launcher"
+                     activity — the one that opens when the user
+                     taps the app icon. -->
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ───────────────────────────────────────────────────────────────
+     themes.xml — defines the app's visual theme
+     ─────────────────────────────────────────────────────────────── -->
+<resources>
+    <style name="Theme.MakeItSo" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- Uses Material Design with no action bar (we use
+             Jetpack Compose for the UI instead of the old XML
+             layout system). -->
+    </style>
+</resources>
