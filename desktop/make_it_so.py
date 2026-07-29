@@ -184,16 +184,18 @@ def main():
                 # Skip to the next loop iteration (go back to sleep).
                 continue
 
-            # ====== STEP 6: THINK (CLAUDE) =======================
-            # Send the transcribed text to Claude, which processes
-            # it and returns what to say and what to do.
-            # Import the `ai` module from `core` — this is our brain.
+            # ====== STEP 6: THINK (AI) ==============================
+            # Send the transcribed text to the AI brain (Claude if
+            # online, Ollama/Llama if offline). Returns what to say
+            # and what actions to execute.
             from core import ai
 
-            # Call `process_with_claude` passing the user's text, the
-            # config (for API keys), and the conversation history so
-            # Claude remembers what was said before.
-            result = ai.process_with_claude(
+            # Call `process_with_ai` passing the user's text, the
+            # config (API keys + mode setting), and conversation
+            # history for context. This function tries online first
+            # (Claude), then automatically falls back to offline
+            # (Ollama) if online is unavailable.
+            result = ai.process_with_ai(
                 user_text,
                 config,
                 conversation_history

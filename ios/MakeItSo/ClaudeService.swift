@@ -1,12 +1,18 @@
 // ─── ClaudeService.swift ─────────────────────────────────────────────
-// This file contains all the code needed to talk to Claude (Anthropic's
-// AI assistant) from an iPhone app. It sends the user's spoken words to
-// Claude over the internet and gets back both a spoken reply and any
-// actions Claude wants to execute (like "search the web" or "send a text").
+// This file contains all the code needed to talk to a Large Language
+// Model (LLM) AI assistant from an iPhone app. It supports TWO modes:
 //
-// The code uses Apple's built-in networking tools (URLSession) so we
-// don't need any extra libraries. We manually build the JSON that the
-// Anthropic API expects and manually parse the response JSON.
+//   ONLINE  mode: Claude API  (Anthropic) — smarter, needs internet
+//   OFFLINE mode: Ollama/Llama (local)    — free, runs on your machine
+//
+// The "mode" is read from the system environment variable AI_MODE.
+//   - "auto"    : try online first, fall back to offline if it fails
+//   - "online"  : only use Claude API, no fallback
+//   - "offline" : only use local Ollama, no internet needed
+//
+// The code uses Apple's built-in networking (URLSession) so no
+// external libraries are needed. We manually build JSON request bodies
+// and parse JSON responses for both AI providers.
 // ──────────────────────────────────────────────────────────────────────
 
 // Import Apple's Foundation framework — this gives us access to basic
@@ -14,19 +20,18 @@
 // We need these to make network requests and work with JSON data.
 import Foundation
 
-// Define a structure (like a simple data container) that holds Claude's
+// Define a structure (like a simple data container) that holds the AI's
 // response. A struct in Swift is a way to group related pieces of data
-// together. This one holds the text Claude speaks and any actions it
-// wants to perform.
+// together. This one holds the spoken text and any actions to execute.
 struct ClaudeResult {
-    // The text that Claude says out loud (as a String of characters).
+    // The text the AI says out loud (as a String of characters).
     let spokenText: String
-    // A list (array) of actions Claude wants executed, like searching
+    // A list (array) of actions the AI wants executed, like searching
     // the web or sending a text message.
     let actions: [ClaudeAction]
 }
 
-// Define a structure that represents a single action Claude wants us
+// Define a structure that represents a single action the AI wants us
 // to perform. For example, "search_web" with a query parameter.
 struct ClaudeAction {
     // What kind of action to perform (like "search_web", "send_sms").
@@ -37,10 +42,10 @@ struct ClaudeAction {
     let params: [String: String]
 }
 
-// Define the main class that handles talking to Claude.
+// Define the main class that handles talking to the AI brain.
 // A class is like a blueprint for creating objects. This one is a
 // "service" — a reusable component that provides a specific feature
-// (in this case, communicating with Claude's API).
+// (in this case, communicating with an LLM like Claude or Ollama).
 class ClaudeService {
     // Create a single shared instance of this class that the whole app
     // can use. This is called the "singleton pattern" — instead of
@@ -57,6 +62,15 @@ class ClaudeService {
     // key, use an empty string instead of crashing". This is private
     // so other parts of the app can't accidentally read our secret key.
     private let apiKey = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"] ?? ""
+
+    // Read the AI mode from environment variable. This controls whether
+    // we use the online Claude API, the offline Ollama, or auto-fallback.
+    //   - "auto"    : try online first, fall back to offline on failure
+    //   - "online"  : use Claude API only (fail if no internet)
+    //   - "offline" : use local Ollama only (no internet needed)
+    // Defaults to "auto" if the environment variable is not set.
+    private let mode = ProcessInfo.processInfo.environment["AI_MODE"] ?? "auto"
+
     // Store the URL for Claude's API (the web address we send requests
     // to). We force-unwrap with `!` because we know this URL is valid
     // (we typed it correctly in the code). If it were invalid, the app
@@ -66,11 +80,11 @@ class ClaudeService {
     private let apiURL = URL(string: "https://api.anthropic.com/v1/messages")!
 
     // Store the "system prompt" — a set of instructions that tells
-    // Claude how to behave. This is a multi-line string (triple quotes).
-    // We tell Claude to act like the computer from Star Trek's USS
+    // the AI how to behave. This is a multi-line string (triple quotes).
+    // We tell the AI to act like the computer from Star Trek's USS
     // Enterprise, to be helpful and calm, and we describe the exact
     // format we want its response to follow. The system prompt is
-    // sent with every request so Claude remembers its role.
+    // sent with every request so the AI remembers its role.
     private let systemPrompt = """
         You are the computer from the USS Enterprise (NCC-1701-D).
         You are helpful, precise, and calm.
@@ -84,34 +98,85 @@ class ClaudeService {
             <key>: <value>
     """
 
-    // Define the main function that sends text to Claude and gets a
+    // Define the main function that sends text to the AI and gets a
     // response back. It takes a String (the user's spoken words) and
     // returns an optional ClaudeResult (either a valid result or nil
     // if something went wrong). The `async` keyword means this function
     // can pause and wait for network operations without freezing the
     // app's interface. The `->` arrow shows what type we return.
+    //
+    // DECISION LOGIC (matching the desktop Python version):
+    //   mode = "online" → try Claude only, no fallback
+    //   mode = "offline" → skip Claude, go straight to Ollama
+    //   mode = "auto"   → try Claude first, fall back to Ollama on failure
     func process(_ userText: String) async -> ClaudeResult? {
         // Check if the API key is empty (not set). `guard` is a Swift
         // keyword that checks a condition — if it fails, we MUST exit
         // the function (via return). The `!` means "not" — so this
-        // checks "if apiKey is NOT empty". If it IS empty, we enter
-        // the else block (actually the guard body) and return early.
-        guard !apiKey.isEmpty else {
+        // checks "if apiKey is NOT empty". If it IS empty, we would
+        // normally return, BUT we also let "offline" mode proceed
+        // (Ollama doesn't need an API key).
+        // Only bail if mode is "online" (which requires a key).
+        if apiKey.isEmpty && mode == "online" {
             // Print a message to the debug console so developers know
             // the API key is missing. This doesn't show to users — it's
             // only visible when running through Xcode.
-            print("ANTHROPIC_API_KEY not set")
-            // Since we don't have a real API key, return a fake response
-            // so the app doesn't crash. We create a ClaudeResult with
-            // a friendly message telling the user to set up their key
-            // and an empty list of actions (no actions to perform).
+            print("ANTHROPIC_API_KEY not set and mode is 'online'")
+            // Return a fake response so the app doesn't crash.
             return ClaudeResult(
-                spokenText: "I am configured and ready, Captain. Please add your Anthropic API key to the environment variables.",
+                spokenText: "Please add your Anthropic API key to use online mode, Captain.",
                 actions: []
             )
         }
-        // Close the else block for the key check.
 
+        // If mode is "offline", skip Claude entirely and go straight
+        // to the local Ollama instance. This is useful for development
+        // without internet access or to avoid API costs.
+        if mode == "offline" {
+            // Print a log message so we know we're using offline mode.
+            print("AI mode is 'offline' — calling Ollama directly.")
+            // Call the Ollama function and return its result directly.
+            return await processWithOllama(userText)
+        }
+
+        // ── ONLINE ATTEMPT (Claude API) ──────────────────────────
+        // If we get here, mode is either "auto" or "online".
+        // We try the Claude API first. If it fails AND mode is "auto",
+        // we'll fall back to Ollama below.
+        print("AI mode is '\(mode)' — trying Claude API first.")
+
+        // Try the online Claude call. If it succeeds, we return the
+        // result immediately. If mode is "online" and it fails, we
+        // return nil (no fallback allowed). If mode is "auto" and it
+        // fails, we continue to the Ollama fallback below.
+        if let result = await processWithClaude(userText) {
+            // Claude returned a valid result — return it immediately.
+            return result
+        }
+
+        // If we're here, the Claude call failed (returned nil).
+        // If mode is "online", we're not allowed to fall back.
+        if mode == "online" {
+            // Log that online mode failed and we're not falling back.
+            print("Claude failed and mode is 'online' — no fallback.")
+            // Return nil to indicate total failure.
+            return nil
+        }
+
+        // ── OFFLINE FALLBACK (Ollama) ───────────────────────────
+        // Mode must be "auto" since we already handled "online" and
+        // "offline" above. Log the fallback for debugging.
+        print("Claude failed — falling back to offline Ollama.")
+        // Call the Ollama function and return whatever it gives us
+        // (might be a valid result or nil if Ollama also fails).
+        return await processWithOllama(userText)
+    }
+
+    // ── processWithClaude() — Online: calls Anthropic's Claude API ──
+    // This is the ORIGINAL logic extracted into its own function.
+    // It sends the user's text to Claude over the internet and parses
+    // the structured response (spoken text + actions).
+    private func processWithClaude(_ userText: String) async -> ClaudeResult? {
         // Open a do-catch block for error handling. This lets us try
         // operations that might fail (like network calls or JSON parsing)
         // and catch any errors that occur. If anything inside the `do`
@@ -125,7 +190,6 @@ class ClaudeService {
             let messages: [[String: Any]] = [
                 ["role": "user", "content": userText]
             ]
-            // Close the messages array.
 
             // Build the full request body — a dictionary of all the
             // parameters Claude's API needs. [String: Any] means the
@@ -150,7 +214,6 @@ class ClaudeService {
                 // 1.0 would be very creative/random.
                 "temperature": 0.7
             ]
-            // Close the body dictionary.
 
             // Convert the body dictionary into actual JSON data (bytes)
             // that can be sent over the internet. JSONSerialization turns
@@ -203,8 +266,8 @@ class ClaudeService {
             // Check that we got a proper HTTP response with a 200 status
             // code (which means "OK" / success). `as?` tries to convert
             // the response to an HTTPURLResponse (which has status codes).
-            // If the conversion fails or the status isn't 200, we enter
-            // the else body and return nil (meaning "no result").
+            // If the conversion fails or the status isn't 200, we return
+            // nil (meaning "no result").
             guard let httpResponse = response as? HTTPURLResponse,
                   httpResponse.statusCode == 200 else {
                 // Log the error for debugging — this tells us the API
@@ -213,7 +276,6 @@ class ClaudeService {
                 // Return nil to indicate we have no valid result.
                 return nil
             }
-            // Close the guard else block.
 
             // Parse the JSON response data into a Swift dictionary.
             // `jsonObject(with:)` converts raw JSON bytes into a Swift
@@ -235,12 +297,11 @@ class ClaudeService {
                 // we couldn't understand the response format.
                 return nil
             }
-            // Close the guard else block.
 
             // Extract just the spoken text from the full response.
             // Claude returns a structured format with "RESPONSE:" and
             // "ACTIONS:" sections — this function parses out the spoken
-            // part (what Claude says out loud).
+            // part (what the AI says out loud).
             let spokenText = extractSpokenText(from: fullText)
             // Extract the list of actions from the full response.
             // Claude might say "I'll search for that" AND include a
@@ -251,7 +312,6 @@ class ClaudeService {
             // and the list of actions. This is the final result that
             // the app will use to speak to the user and perform tasks.
             return ClaudeResult(spokenText: spokenText, actions: actions)
-            // No explicit close needed — the return ends execution here.
         }
         // Close the do block and start the catch block — this runs if
         // any operation in the do block threw an error.
@@ -259,16 +319,169 @@ class ClaudeService {
             // Print the error description to the debug console so
             // developers can see what went wrong (network failure,
             // JSON parsing error, etc.).
-            print("Claude service error: \(error)")
+            print("Claude API error: \(error)")
             // Return nil since we couldn't get a valid response.
             return nil
         }
-        // Close the catch block.
     }
-    // Close the process function.
 
+    // ── processWithOllama() — Offline: calls local Ollama/Llama ─────
+    // Ollama is a FREE program that runs AI models locally on your
+    // computer. It exposes an HTTP API at http://localhost:11434.
+    //
+    // HOW TO SET UP:
+    //   1. Download Ollama from: https://ollama.ai
+    //   2. Install it (it's a normal app installer)
+    //   3. Open Terminal and run: ollama pull llama3.2
+    //      (this downloads a ~2GB model — takes a few minutes)
+    //   4. Keep Ollama running in the background
+    //   5. Set AI_MODE=offline in the scheme's environment variables
+    //
+    // The Ollama API is simpler than Claude's — we send a POST with
+    // a "prompt" string and get back {"response": "..."}.
+    // This function works the same way as processWithClaude — it sends
+    // user text to the AI and returns structured ClaudeResult.
+    private func processWithOllama(_ userText: String) async -> ClaudeResult? {
+        // ── Build the conversation prompt ──────────────────────
+        // Ollama's API takes a single "prompt" string (not separate
+        // messages like Claude). We format it with "User:" and
+        // "Assistant:" markers so the model understands the roles.
+        // The "\n\n" adds a blank line between the user message and
+        // the "Assistant:" prefix that tells the model to start
+        // generating its reply.
+        let promptText = "User: \(userText)\n\nAssistant:"
+
+        // ── Build the JSON request body ────────────────────────
+        // This dictionary will be serialized to JSON and sent to
+        // Ollama's generate endpoint. The keys match the Ollama
+        // HTTP API specification.
+        let body: [String: Any] = [
+            // Which model to use. "llama3.2" is a good balance of
+            // speed and intelligence that runs well on most laptops.
+            // Advanced users can change this to any model they've
+            // pulled with `ollama pull <model>`.
+            "model": "llama3.2",
+            // The formatted conversation text we built above.
+            // Ollama uses this single string as its input.
+            "prompt": promptText,
+            // The system prompt that defines the AI's personality.
+            // This is sent as a separate field in Ollama's API.
+            "system": systemPrompt,
+            // Disable streaming — we want Ollama to generate the
+            // complete response before returning. If set to true,
+            // Ollama would send chunks of text as it generates them,
+            // which requires more complex parsing.
+            "stream": false,
+            // A dictionary of additional generation options that
+            // control how the model behaves.
+            "options": [
+                // Maximum number of tokens (words/parts of words) to
+                // generate. 512 tokens is about 400 words — enough for
+                // a useful response without letting the AI ramble.
+                "num_predict": 512
+            ]
+        ]
+
+        // ── Send the HTTP request ──────────────────────────────
+        // Wrap everything in a do-catch to handle network errors,
+        // JSON parsing errors, and connection refused errors (which
+        // happen when Ollama isn't running).
+        do {
+            // Create the URL for Ollama's generate endpoint.
+            // Ollama runs on localhost (this iPhone/iPad — actually
+            // on the same computer when running in the simulator).
+            // Port 11434 is the default port that Ollama listens on.
+            let ollamaURL = URL(string: "http://localhost:11434/api/generate")!
+
+            // Create a URLRequest for the Ollama endpoint.
+            var request = URLRequest(url: ollamaURL)
+            // Set the HTTP method to POST — we're sending data to
+            // the server (the prompt) and expecting a response back.
+            request.httpMethod = "POST"
+            // Tell the server we're sending JSON data in the body.
+            // This is a standard HTTP header that lets the server
+            // know how to interpret our request.
+            request.setValue("application/json", forHTTPHeaderField: "content-type")
+            // Serialize the body dictionary to JSON bytes.
+            // `try` because JSONSerialization can throw an error if
+            // the dictionary contains unsupported types.
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            // Set a timeout of 60 seconds — Ollama can be slow on
+            // smaller machines, especially the first time a model
+            // is loaded. We give it twice as long as Claude's timeout.
+            request.timeoutInterval = 60
+
+            // Log that we're about to call Ollama (useful for debugging
+            // to see which AI provider is being used).
+            print("Calling Ollama at http://localhost:11434/api/generate")
+
+            // Send the request and wait for the response asynchronously.
+            // `try await` because this is both a throwing and async call.
+            let (data, response) = try await URLSession.shared.data(for: request)
+
+            // Check that we got a valid HTTP response with a 200 status.
+            // A non-200 response means something went wrong on Ollama's
+            // side (e.g., the model doesn't exist).
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else {
+                // Log the error status code for debugging.
+                print("Ollama returned error status")
+                // Return nil — we couldn't get a valid response.
+                return nil
+            }
+
+            // ── Parse the response JSON ────────────────────────
+            // Convert the raw response data bytes into a Swift dictionary.
+            // Ollama returns a JSON object like:
+            //   {"model": "llama3.2", "response": "...", "done": true}
+            guard let json = try JSONSerialization.jsonObject(with: data)
+                    as? [String: Any],
+                  // Extract the "response" field — this is the text the
+                  // AI generated. It's a plain string (not a complex
+                  // structure like Claude's content blocks).
+                  let fullText = json["response"] as? String else {
+                // If we couldn't parse the JSON or the response field
+                // is missing, log a message and return nil.
+                print("Could not parse Ollama response JSON")
+                return nil
+            }
+
+            // ── Extract structured data from the response ──────
+            // The Ollama model was given the same system prompt as
+            // Claude, so its response should follow the same format:
+            //   RESPONSE: <spoken text>
+            //   ACTIONS:
+            //   - action: <type>
+            //     params:
+            //       <key>: <value>
+            // We reuse the same helper functions that processWithClaude
+            // uses to extract spoken text and actions.
+            let spokenText = extractSpokenText(from: fullText)
+            let actions = extractActions(from: fullText)
+
+            // Log success for debugging purposes.
+            print("Ollama response received (\(fullText.count) chars)")
+
+            // Return a ClaudeResult containing the spoken text and
+            // any actions the AI wants us to execute.
+            return ClaudeResult(spokenText: spokenText, actions: actions)
+        }
+        // Close the do block and catch any errors that occurred during
+        // the network request or JSON parsing.
+        catch {
+            // Log the error for debugging. Common errors include:
+            //   - "Connection refused" (Ollama not running)
+            //   - "Could not connect to the server" (no network)
+            //   - JSON parsing errors (bad response format)
+            print("Ollama error: \(error)")
+            // Return nil to indicate that the Ollama call failed.
+            return nil
+        }
+    }
+
+    // ── extractSpokenText() — Gets the "RESPONSE:" portion ─────────
     // Define a private helper function that extracts just the spoken
-    // text part from Claude's full structured response. Private means
+    // text part from the AI's full structured response. Private means
     // only this class can use it — other code doesn't need to know
     // about this internal parsing logic. It takes the full text string
     // and returns just the spoken portion.
@@ -305,10 +518,10 @@ class ClaudeService {
         // how to parse it, so just use it as-is).
         return fullText
     }
-    // Close the extractSpokenText function.
 
+    // ── extractActions() — Gets the "ACTIONS:" portion ─────────────
     // Define a private helper function that extracts the list of
-    // actions from Claude's full structured response. It returns an
+    // actions from the AI's full structured response. It returns an
     // array of ClaudeAction objects. If no actions are found, it
     // returns an empty array instead of nil.
     private func extractActions(from fullText: String) -> [ClaudeAction] {
@@ -324,11 +537,10 @@ class ClaudeService {
             // Return the empty actions array — no actions available.
             return actions
         }
-        // Close the guard else block.
 
         // Extract everything after "ACTIONS:" and remove surrounding
         // whitespace. This gives us the raw text that describes the
-        // actions Claude wants us to perform.
+        // actions the AI wants us to perform.
         let actionsText = fullText[actionsRange.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines)
 
         // Split the actions text into separate blocks by looking for
@@ -355,7 +567,6 @@ class ClaudeService {
                 // to the next one (continue the for loop).
                 continue
             }
-            // Close the guard else block.
 
             // Create an empty dictionary to hold the action's parameters.
             // Parameters are key-value pairs that provide extra info,
@@ -396,24 +607,17 @@ class ClaudeService {
                     // Now other code can look up "query" and get "weather today".
                     params[key] = value
                 }
-                // Close the else-if block — if we're not in the params
-                // section or the line doesn't have a colon, we just
-                // skip it (it's probably empty or irrelevant).
             }
-            // Close the for line loop.
 
             // Add a new ClaudeAction to our list, using the first line
             // as the action type and all the parsed key-value pairs as
             // the parameters. This appends it to the end of the array.
             actions.append(ClaudeAction(actionType: firstLine, params: params))
         }
-        // Close the for block loop.
 
         // Return the array of actions we found. If no actions were
         // parsed, this will be an empty array (not nil), which is
         // easier for other code to handle without optional checking.
         return actions
     }
-    // Close the extractActions function.
 }
-// Close the ClaudeService class.
