@@ -12,12 +12,27 @@
 # way to speak text.
 # ───────────────────────────────────────────────────────────────────
 
+# Import the "os" module so we can interact with the operating
+# system (like running commands or checking file paths). We don't
+# directly use it in this file, but it's imported for consistency
+# with the other modules in the project.
 import os
+# Import the "platform" module, which tells us what operating
+# system the user is running (macOS, Windows, or Linux). This is
+# essential because each OS uses a different command to speak text.
 import platform
+# Import "subprocess", which lets Python run external commands
+# (like opening a program or running a terminal command). We use
+# this to run the system's text-to-speech program.
 import subprocess
+# Import "tempfile" for creating temporary files. We don't use it
+# directly here, but it's available if we ever need to save audio
+# to a temporary file before playing it.
 import tempfile
 
 
+# Define a function called "speak" that takes one argument: "text",
+# which is the string of words we want the computer to say aloud.
 def speak(text):
     """
     Speak the given text aloud using the system's built-in TTS.
@@ -36,67 +51,119 @@ def speak(text):
        - Windows: PowerShell SAPI (built-in)
     3. Runs the command and waits for it to finish.
     """
+    # Check if "text" is empty or only contains spaces/whitespace.
+    # "not text" is True if text is None or an empty string.
+    # ".strip()" removes spaces from both ends, so "   " becomes "".
     if not text or not text.strip():
+        # If there's nothing to say, exit the function immediately
+        # using "return" (with no value). This prevents us from
+        # trying to speak an empty string.
         return  # Nothing to say.
 
+    # Remove any leading or trailing whitespace from the text
+    # (extra spaces at the beginning or end) and save the result
+    # back into the "text" variable.
     text = text.strip()
 
-    # Detect the operating system.
+    # Detect the operating system. platform.system() returns a
+    # string like "Darwin" (macOS), "Linux", or "Windows". We
+    # store this in "system" to decide which command to run.
     system = platform.system()
 
+    # Use a try/except block so that if the speech command fails
+    # (e.g., the program isn't installed), we catch the error
+    # instead of crashing the whole assistant.
     try:
+        # Check if the system is macOS (Apple calls it "Darwin"
+        # internally, named after Charles Darwin).
         if system == "Darwin":
             # ── macOS: `say` command ─────────────────────────────
             # The `say` command has been part of macOS since the
             # beginning. It uses the built-in TTS voices.
             # Voice "Samantha" is clear and pleasant.
+            # subprocess.run() runs a command in the terminal.
+            # We pass a list: ["say", "-v", "Samantha", text].
+            # This is equivalent to typing in Terminal:
+            #   say -v Samantha "Hello world"
             subprocess.run(
                 ["say", "-v", "Samantha", text],
-                check=True,
-                timeout=30
+                check=True,   # Raise an error if the command fails.
+                timeout=30    # Stop if it takes longer than 30 secs.
             )
 
+        # Otherwise, check if the system is Linux.
         elif system == "Linux":
             # ── Linux: try `espeak`, fall back to `spd-say` ──────
             # espeak is the most common Linux TTS. On Raspberry Pi
             # install it with: sudo apt install espeak
+            # Try to run espeak first. If it's not installed, we'll
+            # catch the FileNotFoundError and try something else.
             try:
+                # Run "espeak" with the text as an argument.
                 subprocess.run(
                     ["espeak", text],
-                    check=True,
-                    timeout=30
+                    check=True,   # Raise error if espeak fails.
+                    timeout=30    # Stop after 30 seconds.
                 )
+            # If "espeak" is not installed, Python raises
+            # FileNotFoundError (the executable wasn't found).
             except FileNotFoundError:
-                # espeak not installed — try speech-dispatcher.
+                # espeak not installed — try speech-dispatcher's
+                # "spd-say" command as a fallback.
                 try:
+                    # Run "spd-say" with the text as an argument.
                     subprocess.run(
                         ["spd-say", text],
-                        check=True,
-                        timeout=30
+                        check=True,   # Raise error if it fails.
+                        timeout=30    # Stop after 30 seconds.
                     )
+                # If neither espeak nor spd-say are installed,
+                # catch the FileNotFoundError again.
                 except FileNotFoundError:
+                    # Print a helpful message telling the user to
+                    # install espeak so speech will work.
                     print("  [tts] No TTS found. Install espeak:")
                     print("    sudo apt install espeak")
 
+        # Otherwise, check if the system is Windows.
         elif system == "Windows":
             # ── Windows: PowerShell SAPI ─────────────────────────
             # Windows has a built-in SAPI (Speech API) that can be
             # accessed via PowerShell. No extra install needed.
+            # Build a PowerShell command string that:
+            # 1. Loads the System.Speech library (Add-Type).
+            # 2. Creates a SpeechSynthesizer object.
+            # 3. Calls .Speak() with the text.
+            # We use .replace() to escape any double quotes in the
+            # text so they don't break the PowerShell command.
             ps_script = (
                 f'Add-Type -AssemblyName System.Speech; '
                 f'$s=New-Object System.Speech.Synthesis.SpeechSynthesizer; '
                 f'$s.Speak("{text.replace(\'"\', \'\\"\')}")'
             )
+            # Run the PowerShell command. "powershell" is the
+            # program, "-Command" tells it to run a script string.
             subprocess.run(
                 ["powershell", "-Command", ps_script],
-                check=True,
-                timeout=30
+                check=True,   # Raise error if PowerShell fails.
+                timeout=30    # Stop after 30 seconds.
             )
 
+        # If we get here, the OS wasn't macOS, Linux, or Windows.
         else:
+            # Print an error message showing what OS was detected
+            # (so the user can tell us about it for future support).
             print(f"  [tts] Unknown OS: {system}. Cannot speak.")
 
+    # If the subprocess took longer than 30 seconds, Python raises
+    # subprocess.TimeoutExpired. We catch it here to handle it.
     except subprocess.TimeoutExpired:
+        # Tell the user the speech was taking too long and we
+        # cancelled it so the program doesn't hang forever.
         print("  [tts] Speech timed out (took too long).")
+    # Catch any other unexpected errors (e.g., text has special
+    # characters that break the command, permissions issues, etc.).
     except Exception as e:
+        # Print the error message so the user knows what happened
+        # and can report it for debugging.
         print(f"  [tts] Error during speech: {e}")
