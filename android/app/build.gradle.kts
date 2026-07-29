@@ -60,4 +60,14 @@ dependencies {
 
     // ── JSON parsing (for API responses) ─────────────────────
     implementation("org.json:json:20231013")
+
+    // ── Offline mode (Ollama) ──────────────────────────────────
+    // No additional dependencies needed for offline mode — it reuses
+    // the same OkHttp client and JSON parser that the online mode uses.
+    // The only requirement is that Ollama is running on localhost:11434
+    // with the "llama3.2" model pulled. This is all handled at runtime
+    // by ClaudeService.processWithOllama() using standard HTTP calls.
+    //
+    // Future: if we want to bundle an embedded LLM, we'd add a
+    // dependency like `org.pytorch:pytorch_android:2.1.0` here.
 }

@@ -1,34 +1,32 @@
-# ───────────────────────────────────────────────────────────────────
-# requirements.txt — all Python libraries needed for development
-# ───────────────────────────────────────────────────────────────────
-# These are installed during development to build the app.
+# ── requirements.txt — all Python libraries for development ──────
 # End users DON'T install these — they run the standalone .exe/.app.
-#
-# To install:  pip install -r requirements.txt
-# ───────────────────────────────────────────────────────────────────
+# Install with: pip install -r requirements.txt
 
-# ── Wake word detection ──────────────────────────────────────────
-# Detects "Computer" on the microphone. Tiny, fast, offline.
+# ── Wake word detection (used in ALL modes) ─────────────────────
+# Detects "Computer" on the microphone. Tiny, fast, works offline.
 pvporcupine>=3.0.0
 
-# ── Microphone access ────────────────────────────────────────────
+# ── Microphone access (used in ALL modes) ───────────────────────
 # Reads audio from the microphone on all platforms.
 pyaudio>=0.2.13
 
-# ── AI API calls ─────────────────────────────────────────────────
+# ── AI API calls (used in ONLINE mode) ─────────────────────────
 # Sends HTTP requests to OpenAI (Whisper) and Anthropic (Claude).
 requests>=2.31.0
 
-# ── Configuration ────────────────────────────────────────────────
+# ── Configuration (used in ALL modes) ──────────────────────────
 # Reads config.yaml (YAML files are easy to read and edit).
 pyyaml>=6.0
 
-# ── System control (optional, for mouse/keyboard actions) ───────
-# Controls the mouse and keyboard programmatically.
+# ── Offline speech-to-text (used in OFFLINE mode) ──────────────
+# Runs speech recognition locally. Download a model from:
+# https://alphacephei.com/vosk/models
+# Extract to: desktop/models/vosk-model-small-en-us-0.15/
+vosk>=0.3.45
+
+# ── System control (optional, for mouse/keyboard actions) ─────
 # Uncomment if you want Claude to click, type, and control your PC.
 # pyautogui>=0.9.54
 
-# ── PyInstaller (builds the standalone executable) ──────────────
-# Packages everything into one file you can share with anyone.
-# Uncomment when you're ready to build:
+# ── Build tool (run when you're ready to make a .exe/.app) ─────
 # pyinstaller>=6.0

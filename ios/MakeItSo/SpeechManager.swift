@@ -11,6 +11,18 @@
 //
 // The recognition can happen on-device (offline) for basic accuracy, or
 // use Apple's servers for better results. This code supports both.
+//
+// FUTURE ENHANCEMENT — OFFLINE VOSK STT:
+//   Even though Apple's speech recognizer can work offline, a dedicated
+//   offline engine like Vosk (https://alphacephei.com/vosk/) could be
+//   added as an alternative for users who want:
+//     - Complete privacy (no audio ever leaves the device)
+//     - No dependency on Apple's servers at all
+//     - Custom vocabulary for Star Trek commands
+//   Vosk runs entirely on-device with small (~50MB) language model files.
+//   To integrate it, you'd replace or augment the existing recognize()
+//   function to call the Vosk Objective-C/Swift bindings instead of (or
+//   as a fallback from) SFSpeechRecognizer.
 // ──────────────────────────────────────────────────────────────────────
 
 // Import Foundation — gives us basic Swift types and utilities like

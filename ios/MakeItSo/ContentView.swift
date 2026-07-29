@@ -32,14 +32,14 @@ struct ContentView: View {
     // "private" means only this view can change or read it.
     @State private var assistantState = "Tap to say \"Computer\""
 
-    // Stores the last text response from Claude. This gets shown on
-    // screen so the user can read what Claude said (in addition to
-    // hearing it spoken out loud). Starts empty because Claude hasn't
-    // said anything yet.
+    // Stores the last text response from the AI. This gets shown on
+    // screen so the user can read what the AI said (in addition to
+    // hearing it spoken out loud). Starts empty because nothing has
+    // been said yet.
     @State private var lastResponse = ""
 
     // Stores a description of the last action that was executed.
-    // For example, if Claude told us to search the web, this would say
+    // For example, if the AI told us to search the web, this would say
     // "Executing: search_web". Starts empty because no action ran yet.
     @State private var lastAction = ""
 
@@ -118,22 +118,22 @@ struct ContentView: View {
             // so the button doesn't touch the screen edges.
             .padding(.horizontal)
 
-            // Show Claude's response text only if it's not empty.
+            // Show the AI's response text only if it's not empty.
             // The `if` condition checks `!lastResponse.isEmpty` — the
             // "!" means "not", so this is "if lastResponse is NOT empty".
             if !lastResponse.isEmpty {
                 // A vertical stack for the response section, aligned
                 // to the left (leading edge) with 8 points between items.
                 VStack(alignment: .leading, spacing: 8) {
-                    // A small caption label saying "Claude says:" to
+                    // A small caption label saying "AI says:" to
                     // introduce the response text.
-                    Text("Claude says:")
+                    Text("AI says:")
                         // Use the smallest standard font size for a label.
                         .font(.caption)
                         // Make it gray to distinguish from the response.
                         .foregroundColor(.secondary)
 
-                    // Show the actual response text from Claude.
+                    // Show the actual response text from the AI.
                     Text(lastResponse)
                         // Use standard body font size for readability.
                         .font(.body)
@@ -223,6 +223,14 @@ struct ContentView: View {
     // workflow: wake word detection → chime → listen → think → speak
     // → act. It's marked `async` because it uses await for operations
     // that take time (speech recognition, network requests).
+    //
+    // The "think" step (step 4) calls ClaudeService.process() which
+    // internally handles the online/offline logic:
+    //   - ONLINE: sends text to Claude API (needs internet)
+    //   - OFFLINE: sends text to local Ollama (runs on your machine)
+    //   - AUTO: tries online first, falls back to offline on failure
+    // This is transparent to the ContentView — it just calls process()
+    // and gets back a result regardless of which AI provider was used.
     private func runAssistantCycle() async {
         // STEP 1: Show that we're waiting for the wake word "Computer".
         // The await here means the UI updates before we continue.
@@ -256,40 +264,45 @@ struct ContentView: View {
         }
         // Close the guard else block.
 
-        // STEP 4: Send the transcribed text to Claude for processing.
-        // Show a thinking indicator while we wait for Claude's reply.
+        // STEP 4: Send the transcribed text to the AI for processing.
+        // This calls ClaudeService.process() which handles the online/
+        // offline decision internally:
+        //   - Tries Claude API first (online, needs internet + API key)
+        //   - Falls back to Ollama offline if mode is "auto" and Claude fails
+        //   - Uses Ollama directly if mode is "offline"
+        // Show a thinking indicator while we wait for the AI's reply.
         await updateState("🧠 Thinking...")
-        // Call ClaudeService to send the text to Anthropic's API and get
-        // back a response. The `await` pauses while the network request
-        // completes. If it returns nil, something went wrong.
+        // Call ClaudeService to process the text. The `await` pauses
+        // while the network request (or local Ollama call) completes.
+        // If it returns nil, something went wrong with both providers.
         guard let result = await ClaudeService.shared.process(speechText) else {
-            // Show an error message if Claude didn't respond properly.
-            await updateState("Claude did not respond.")
-            // Exit — we can't proceed without Claude's response.
+            // Show an error message if we couldn't get a valid response.
+            await updateState("AI did not respond. Check your connection or Ollama.")
+            // Exit — we can't proceed without a valid response.
             return
         }
         // Close the guard else block.
 
-        // STEP 5: Speak Claude's response out loud using text-to-speech.
+        // STEP 5: Speak the AI's response out loud using text-to-speech.
         // We must update UI properties on the main thread (UIKit/SwiftUI
         // requirement). `MainActor.run` ensures the code inside runs on
         // the main thread where UI changes are safe.
         await MainActor.run {
-            // Store Claude's spoken text in our state variable so it
+            // Store the AI's spoken text in our state variable so it
             // appears on screen for the user to read.
             lastResponse = result.spokenText
             // Close the MainActor closure.
         }
-        // Use the text-to-speech service to actually speak Claude's
+        // Use the text-to-speech service to actually speak the AI's
         // response out loud through the iPhone's speaker.
         TTSService.shared.speak(result.spokenText)
 
-        // STEP 6: Execute any actions Claude requested.
+        // STEP 6: Execute any actions the AI requested.
         // Check if there are any actions to perform. Actions might be
         // things like opening Safari or sending a text message. If
         // the array is empty, we skip this step entirely.
         if !result.actions.isEmpty {
-            // Loop through each action Claude returned. `for action in`
+            // Loop through each action the AI returned. `for action in`
             // iterates over the array, giving us one ClaudeAction at a time.
             for action in result.actions {
                 // Update the UI to show which action we're executing.
@@ -303,7 +316,7 @@ struct ContentView: View {
                 }
                 // Execute the action using ActionRouter. This might open
                 // Safari, send a text, call someone, etc., depending on
-                // what Claude told us to do.
+                // what the AI told us to do.
                 ActionRouter.shared.execute(action)
                 // Continue to the next action in the list (if any).
             }
