@@ -5,11 +5,16 @@
 // It shows:
 //   1. The current state of the assistant (listening/processing/idle)
 //   2. A button to manually trigger the wake word detection
-//   3. Claude's spoken response (as text on screen)
+//   3. The assistant's spoken response (as text on screen)
 //   4. Any actions that were executed
 //
-// The main logic (wake word → listen → Claude → speak → act) runs
+// The main logic (wake word → listen → think → speak → act) runs
 // in a background coroutine so the UI stays responsive.
+//
+// The "think" step now supports DUAL MODE:
+//   - ONLINE  → Claude API (cloud, requires internet + API key)
+//   - OFFLINE → Ollama on localhost:11434 (local, free)
+//   - AUTO    → try online first, fall back to offline if it fails
 // ───────────────────────────────────────────────────────────────────
 
 // This line declares the package (namespace) this file belongs to. It matches the folder structure.
@@ -63,7 +68,7 @@ class MainActivity : ComponentActivity() {
     // assistantState shows the current status text displayed on screen (e.g., "Listening...").
     private var assistantState by mutableStateOf("Say \"Computer\" to start")
 
-    // lastResponse stores Claude's most recent spoken text so it can be shown on the screen.
+    // lastResponse stores the assistant's most recent spoken text so it can be shown on the screen.
     private var lastResponse by mutableStateOf("")
 
     // lastAction stores a description of the most recent action that was executed (shown in the UI).
@@ -76,6 +81,15 @@ class MainActivity : ComponentActivity() {
     // Text-to-Speech engine instance. "var" means it can change (initialized in onCreate, null when destroyed).
     // "?" means it can be null (the TTS engine might not be available or isn't initialized yet).
     private var tts: TextToSpeech? = null
+
+    // ── Config values ──────────────────────────────────────────
+    // The operating mode for the assistant:
+    //   "auto"    → try Claude API online first, fall back to Ollama offline if it fails
+    //   "online"  → use Claude API only (fail if no internet)
+    //   "offline" → use Ollama locally only (fail if Ollama isn't running)
+    // This can be loaded from a config file or shared preferences in the future.
+    // For now it's hardcoded to "auto" to give the best user experience.
+    private val assistantMode = "auto"
 
     // ── Activity lifecycle ──────────────────────────────────────
     // onCreate() is called when Android first creates the activity (the app starts or resumes).
@@ -104,7 +118,7 @@ class MainActivity : ComponentActivity() {
                 MakeItSoScreen(
                     // Current status text to display (e.g., "Listening...").
                     state = assistantState,
-                    // Claude's last spoken response text.
+                    // The assistant's last spoken response text.
                     response = lastResponse,
                     // Description of the last executed action.
                     action = lastAction,
@@ -144,6 +158,11 @@ class MainActivity : ComponentActivity() {
     // ── The main cycle: wake → listen → think → speak → act ─────
     // "suspend" means this function can be paused without blocking the thread.
     // It orchestrates the entire voice assistant flow step by step.
+    //
+    // The "think" step (step 4) now uses dual-mode processing:
+    //   - Tries Claude API online first (requires internet + API key)
+    //   - Falls back to Ollama on localhost:11434 if online fails
+    //   - Mode is controlled by the assistantMode config variable
     private suspend fun runAssistantCycle() {
         // Wrap everything in try-catch so any unexpected error shows a message instead of crashing.
         try {
@@ -181,28 +200,33 @@ class MainActivity : ComponentActivity() {
             }
             // End of speech recognition check.
 
-            // STEP 4: Send to Claude for processing.
-            // Update the UI to show Claude is thinking.
+            // STEP 4: Send to the assistant for processing.
+            // Update the UI to show the assistant is thinking.
             assistantState = "🧠 Thinking..."
-            // Call ClaudeService.process() which sends the text to Anthropic's API and parses the reply.
-            val result = ClaudeService.process(speechText)
-            // If Claude didn't respond (null means an error or empty response)...
+            // Call ClaudeService.process() which sends the text to the configured provider.
+            // The mode parameter controls the behavior:
+            //   "auto"    → try Claude API online first, fall back to Ollama offline
+            //   "online"  → use Claude API only
+            //   "offline" → use Ollama locally only
+            // The assistantMode is loaded from config (hardcoded to "auto" for now).
+            val result = ClaudeService.process(speechText, assistantMode)
+            // If the assistant didn't respond (null means all providers failed)...
             if (result == null) {
                 // ...show an error and stop.
-                assistantState = "Claude did not respond."
+                assistantState = "Assistant did not respond. Check network or start Ollama."
                 // Return early.
                 return
             }
-            // End of Claude processing check.
+            // End of assistant processing check.
 
-            // STEP 5: Speak Claude's response aloud.
+            // STEP 5: Speak the assistant's response aloud.
             // Save the spoken text to lastResponse so it appears on screen.
             lastResponse = result.spokenText
             // Use TTS to speak the text aloud. QUEUE_FLUSH means stop any current speech and start this one.
             tts?.speak(result.spokenText, TextToSpeech.QUEUE_FLUSH, null, null)
 
-            // STEP 6: Execute any actions Claude requested.
-            // Only proceed if Claude sent back one or more actions.
+            // STEP 6: Execute any actions the assistant requested.
+            // Only proceed if the assistant sent back one or more actions.
             if (result.actions.isNotEmpty()) {
                 // Loop through each action in the list and execute them one by one.
                 for (action in result.actions) {
@@ -309,7 +333,7 @@ fun MakeItSoTheme(content: @Composable () -> Unit) {
 fun MakeItSoScreen(
     // state: the current status text to display (e.g., "Listening for 'Computer'...").
     state: String,
-    // response: Claude's last spoken response (shown in a card).
+    // response: the assistant's last spoken response (shown in a card).
     response: String,
     // action: description of the last action executed.
     action: String,
@@ -359,10 +383,10 @@ fun MakeItSoScreen(
             Text("Say 'Computer'")
         }
 
-        // Add 24dp of space before Claude's response card.
+        // Add 24dp of space before the assistant's response card.
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ── Claude's last response ────────────────────────────
+        // ── Assistant's last response ─────────────────────────
         // Only show the response card if there IS a response to show.
         if (response.isNotEmpty()) {
             // Card() is a Material Design elevated container with rounded corners.
@@ -373,15 +397,15 @@ fun MakeItSoScreen(
                 // Label above the response text.
                 Text(
                     // Descriptive label for what this card contains.
-                    text = "Claude says:",
+                    text = "Assistant says:",
                     // labelMedium is a small, uppercase-style label text.
                     style = MaterialTheme.typography.labelMedium,
                     // Add 8dp padding on the top and left so text isn't flush against the card edge.
                     modifier = Modifier.padding(top = 8.dp, start = 8.dp)
                 )
-                // The actual response text from Claude.
+                // The actual response text from the assistant.
                 Text(
-                    // Claude's spoken response text.
+                    // The assistant's spoken response text.
                     text = response,
                     // bodyMedium is the standard body text size.
                     style = MaterialTheme.typography.bodyMedium,
