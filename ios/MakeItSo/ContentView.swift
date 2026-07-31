@@ -49,6 +49,21 @@ struct ContentView: View {
     // Starts false because nothing is happening yet.
     @State private var isProcessing = false
 
+    // Holds the WakeWordService instance that listens for "Computer"
+    // in the background. When the wake word is detected, it triggers
+    // the full assistant cycle automatically. This is optional because
+    // wake word detection only works when a PICOVOICE_ACCESS_KEY
+    // environment variable is set. If no key is provided, we fall back
+    // to button-only mode and this stays nil.
+    @State private var wakeWordService: WakeWordService?
+
+    // Holds a reference to the background Task that runs the wake word
+    // detection loop. We keep a reference so we can cancel the task
+    // when the view disappears (to stop listening and free system
+    // resources). The task is created in onAppear and cancelled in
+    // onDisappear. It's optional (Task?) because we create it lazily.
+    @State private var wakeWordTask: Task<Void, Never>?
+
     // This is the required property that every View must have. It
     // describes what to draw on screen. SwiftUI calls this whenever
     // it needs to render (or re-render) the screen. `some View` means
@@ -139,11 +154,14 @@ struct ContentView: View {
                         .font(.body)
                         // Add padding inside the box around the text.
                         .padding()
-                        // Set a light gray background (systemGray6 is a
-                        // very light gray that works in light and dark
-                        // modes) to make the text look like it's in a
-                        // speech bubble.
+                        // Set a light gray background (using systemGray6 on iOS
+                        // or a cross-platform equivalent) to make the text
+                        // look like it's in a speech bubble.
+                        #if canImport(UIKit)
                         .background(Color(.systemGray6))
+                        #else
+                        .background(Color.gray.opacity(0.15))
+                        #endif
                         // Round the corners of the speech bubble box.
                         .cornerRadius(8)
                     // Close the response text modifier chain.
@@ -177,15 +195,35 @@ struct ContentView: View {
         // icon are at the top of the screen).
         .padding(.top, 60)
         // When the view first appears on screen (`.onAppear`), we call
-        // a function to ask for microphone permission. This ensures
-        // the permission dialog shows as soon as the app opens, rather
-        // than surprising the user later when they try to speak.
+        // a function to ask for microphone permission and start the
+        // wake word detection loop. This ensures the permission dialog
+        // shows as soon as the app opens, rather than surprising the
+        // user later when they try to speak.
         .onAppear {
             // Call the function that requests mic access from the user.
             requestMicrophonePermission()
+            // Start the background wake word detection loop. If a
+            // PICOVOICE_ACCESS_KEY is set in the environment, this
+            // creates a WakeWordService and begins listening for
+            // "Computer". If no key is set, the button remains the
+            // only way to trigger the assistant.
+            startWakeWordDetection()
             // Close the onAppear closure.
         }
         // Close the onAppear modifier.
+        // When the view disappears (e.g., app goes to background or
+        // user navigates away), we stop the wake word detection loop.
+        // This is important because running the microphone continuously
+        // in the background would drain the battery and potentially
+        // violate App Store guidelines. We cancel the background task
+        // and release the PorcupineManager to free system resources.
+        .onDisappear {
+            // Stop the wake word detection loop and release audio
+            // resources. This cancels the background task and calls
+            // destroy() on the WakeWordService to stop the microphone.
+            stopWakeWordDetection()
+            // Close the onDisappear closure.
+        }
     }
     // Close the body property.
 
@@ -202,6 +240,15 @@ struct ContentView: View {
         // "Processing..." This prevents double-taps and shows feedback.
         isProcessing = true
 
+        // Stop wake word detection to avoid audio session conflicts.
+        // Both Porcupine (wake word engine) and SpeechManager (speech
+        // recognition) need exclusive access to the microphone. If we
+        // leave wake word running while the assistant starts listening
+        // for commands, the two audio engines would conflict (both
+        // trying to capture from the mic). We stop wake word here so
+        // SpeechManager can use the mic cleanly.
+        stopWakeWordDetection()
+
         // Run the assistant cycle as an asynchronous task. `Task` creates
         // a new async context that runs in the background while the UI
         // stays responsive. The `await` inside will pause without freezing.
@@ -213,6 +260,15 @@ struct ContentView: View {
             // Once the cycle finishes (or fails), reset the processing
             // flag to false so the user can tap the button again.
             isProcessing = false
+
+            // Restart wake word detection after the assistant finishes
+            // its cycle. This enables continuous hands-free operation:
+            // the user says "Computer" once, gives a command, hears the
+            // AI's response, then can say "Computer" again immediately
+            // without tapping the button. If no PICOVOICE_ACCESS_KEY is
+            // set, this is a no-op (the startWakeWordDetection function
+            // checks for the key and returns early if not available).
+            startWakeWordDetection()
             // Close the Task closure.
         }
         // Close the Task block.
@@ -365,11 +421,173 @@ struct ContentView: View {
     }
     // Close the playChime function.
 
+    // ── Wake Word Detection ─────────────────────────────────────────
+    // The following two functions manage the background wake word
+    // detection loop. When active, Porcupine listens for "Computer"
+    // through the microphone. When detected, it automatically triggers
+    // the full assistant cycle (play chime → listen → think → speak
+    // → act). The user can also tap the button as a fallback.
+    //
+    // PREREQUISITE: Set PICOVOICE_ACCESS_KEY in Xcode scheme:
+    //   Edit Scheme → Run → Arguments → Environment Variables
+    //   Name: PICOVOICE_ACCESS_KEY
+    //   Value: (your key from https://console.picovoice.ai/)
+
+    // A private function that starts the background wake word detection
+    // loop. It reads the PICOVOICE_ACCESS_KEY from environment variables,
+    // creates a WakeWordService, and enters an infinite loop that awaits
+    // detection. When "Computer" is heard, it plays the chime and runs
+    // the full assistant cycle. After the cycle completes, the loop
+    // automatically restarts detection for continuous hands-free use.
+    //
+    // If no PICOVOICE_ACCESS_KEY is set, this function prints a message
+    // and returns immediately — the assistant works via button only.
+    private func startWakeWordDetection() {
+        // Read the Picovoice access key from the environment. This key
+        // is set in the Xcode scheme's environment variables. If it's
+        // not set, we skip wake word detection entirely and fall back
+        // to button-only mode. The `?? ""` handles the case where the
+        // environment variable doesn't exist at all.
+        let accessKey = ProcessInfo.processInfo.environment["PICOVOICE_ACCESS_KEY"] ?? ""
+
+        // If the key is empty (not set), we can't use Porcupine at all.
+        // Print a message to the console so developers know why wake
+        // word isn't working, then return early without starting the
+        // detection loop. The app still works via the button.
+        guard !accessKey.isEmpty else {
+            // Log that wake word is disabled so developers remember to
+            // set the environment variable in the Xcode scheme.
+            print("PICOVOICE_ACCESS_KEY not set — wake word detection disabled. Set it in Edit Scheme → Run → Arguments → Environment Variables.")
+            // Exit the function — no detection loop to start.
+            return
+        }
+
+        // Create a WakeWordService instance with the access key. This
+        // doesn't start listening yet — it just stores the key for later
+        // use. The actual detection begins when detect() is called below.
+        // We store the service as a state variable so we can access it
+        // from other methods (like stopWakeWordDetection).
+        wakeWordService = WakeWordService(accessKey: accessKey)
+
+        // Update the assistant state to show that wake word detection
+        // is active. The user sees this message and knows they can just
+        // say "Computer" instead of tapping the button. We use async
+        // update because assistantState is a @State property.
+        Task { @MainActor in
+            assistantState = "🎤 Listening for 'Computer'..."
+        }
+
+        // Create a background Task that runs the detection loop. The
+        // Task is a Swift concurrency construct that runs asynchronously
+        // on a background thread. We store a reference to it in the
+        // wakeWordTask state variable so we can cancel it later (in
+        // stopWakeWordDetection or if the view disappears).
+        //
+        // We don't use [weak self] here because ContentView is a SwiftUI
+        // View struct. SwiftUI ensures the view's storage remains valid
+        // for the duration it's displayed. When the view disappears,
+        // onDisappear cancels this task, breaking the reference cycle.
+        wakeWordTask = Task {
+            // Enter the main detection loop. We use a while loop with a
+            // Task.isCancelled check so the loop exits cleanly when the
+            // task is cancelled (e.g., from onDisappear or button press).
+            // The loop runs indefinitely until cancelled — each iteration
+            // waits for a wake word, processes it, then loops back.
+            while !Task.isCancelled {
+                // Wait for the "Computer" wake word. The detect() function
+                // pauses here until Porcupine hears the keyword (or an
+                // error occurs). It returns true if "Computer" was detected,
+                // false if there was an error (mic denied, etc.).
+                //
+                // If the WakeWordService was destroyed (wakeWordService set
+                // to nil), detect() is called on nil and returns false,
+                // causing the loop to continue harmlessly. The service is
+                // recreated on the next startWakeWordDetection call.
+                let detected = await wakeWordService?.detect() ?? false
+
+                // If the wake word was detected AND we're not already
+                // processing a previous command, start the assistant cycle.
+                // The isProcessing check prevents overlapping cycles if
+                // the user also tapped the button simultaneously.
+                if detected && !isProcessing {
+                    // Set the processing flag to prevent concurrent cycles.
+                    // This disables the button and shows "Processing..."
+                    // on screen so the user knows the assistant is busy.
+                    await MainActor.run { isProcessing = true }
+
+                    // Play the acknowledgment chime (Star Trek sound).
+                    // We call playChime directly (not through the full
+                    // runAssistantCycle) because we skip the manual wake
+                    // word step since Porcupine already detected it.
+                    playChime()
+
+                    // Run the full assistant cycle: listen for command →
+                    // send to AI → speak response → execute actions.
+                    // We reuse the existing runAssistantCycle to keep
+                    // the flow consistent between button and wake word.
+                    // Note: runAssistantCycle will show "Listening for
+                    // command..." and start speech recognition.
+                    await runAssistantCycle()
+
+                    // Reset the processing flag so the user can trigger
+                    // another cycle (via wake word or button).
+                    await MainActor.run { isProcessing = false }
+
+                    // After the cycle finishes, the loop continues to the
+                    // next iteration, calling service.detect() again to
+                    // wait for the next "Computer". This gives continuous
+                    // hands-free operation without needing to tap.
+                }
+                // If detect() returned false (error) or we're already
+                // processing, the loop just continues to the next
+                // detect() call, effectively retrying indefinitely.
+            }
+            // Close the while loop — the task was cancelled or the view
+            // was dismissed, so we stop detecting.
+        }
+        // Close the Task initializer.
+    }
+
+    // A private function that stops the wake word detection loop and
+    // releases all associated resources. Call this when:
+    //   - The user taps the button (to free the mic for speech recognition)
+    //   - The view disappears (to avoid background battery drain)
+    //   - The app enters the background (App Store compliance)
+    //
+    // This function is safe to call multiple times — subsequent calls
+    // are no-ops once the task is cancelled and the service is destroyed.
+    private func stopWakeWordDetection() {
+        // Cancel the wake word detection Task. This sets the cancellation
+        // flag on the task, which the while loop checks via
+        // Task.isCancelled. The loop exits cleanly on its next iteration.
+        // If wakeWordTask is nil (never started or already stopped),
+        // the optional chaining does nothing.
+        wakeWordTask?.cancel()
+        // Release the task reference. Setting to nil allows ARC to
+        // deallocate the task object. We also set the service to nil
+        // below, so both references are cleaned up together.
+        wakeWordTask = nil
+
+        // Destroy the WakeWordService instance. This stops the
+        // PorcupineManager's audio capture and releases the microphone.
+        // Calling destroy() is important because Porcupine holds the
+        // audio session, and we need to release it before SpeechManager
+        // (speech recognition) can use the mic.
+        wakeWordService?.destroy()
+        // Release the service reference. Setting to nil allows ARC to
+        // deallocate the service and its PorcupineManager. Service is
+        // now nil until startWakeWordDetection is called again.
+        wakeWordService = nil
+    }
+
     // A function that asks the user for permission to use the microphone.
     // iOS requires explicit user permission before any app can access
     // the microphone. We call this when the app first opens so it's
     // ready when the user wants to speak.
+    // On macOS (for testing), microphone permission is handled differently
+    // or may not be needed, so we provide a stub.
     private func requestMicrophonePermission() {
+        #if canImport(UIKit)
         // Get the shared audio session (the system's audio manager) and
         // call requestRecordPermission. The system shows a dialog asking
         // "Allow Make It So to access the microphone?" The closure runs
@@ -395,6 +613,11 @@ struct ContentView: View {
             // do anything because the mic will work when needed.
         }
         // Close the requestRecordPermission call.
+        #else
+        // On non-iOS platforms, microphone permission is not applicable.
+        // We assume access is available and don't show a permission dialog.
+        print("requestMicrophonePermission() skipped — not on iOS.")
+        #endif
     }
     // Close the requestMicrophonePermission function.
 }

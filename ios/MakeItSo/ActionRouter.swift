@@ -15,7 +15,10 @@
 // how we launch Safari, Messages, Phone, and other apps on iOS).
 // UIKit is the older iOS framework (SwiftUI is newer) but for opening
 // other apps we still need UIKit's capabilities.
+// We use `canImport` so this compiles on macOS too (for testing).
+#if canImport(UIKit)
 import UIKit
+#endif
 
 // Define the ActionRouter class. This is responsible for figuring out
 // what type of action Claude requested and performing the appropriate
@@ -37,6 +40,8 @@ class ActionRouter {
         // action type. A switch is cleaner than multiple if-else chains
         // and makes it easy to add new action types later. Swift's switch
         // must be exhaustive — we handle every case including unknown ones.
+        // On non-iOS platforms (e.g., macOS testing), we just log actions.
+        #if canImport(UIKit)
         switch action.actionType {
 
         // Handle the "search_web" action — opens Safari to search for
@@ -152,6 +157,9 @@ class ActionRouter {
             // Close the default case.
         }
         // Close the switch statement.
+        #else
+        print("[ActionRouter] Would execute: \(action.actionType) with params: \(action.params)")
+        #endif
     }
     // Close the execute function.
 }

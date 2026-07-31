@@ -32,24 +32,35 @@ import Foundation
 // Import Speech — this gives us SFSpeechRecognizer and related classes
 // for converting audio into text. This is Apple's speech recognition
 // framework, separate from the audio capture framework (AVFoundation).
+// On macOS (for testing/compilation), Speech is available but
+// AVAudioSession (used for configuring microphone input) is not.
+// We use `os(iOS)` to gate the full implementation.
+#if os(iOS)
 import Speech
+#endif
 // Import AVFoundation — this gives us AVAudioEngine, which we use to
 // capture audio from the microphone and feed it to the speech recognizer.
 // AVFoundation is Apple's main framework for working with audio/video.
 import AVFoundation
 
 // Define the SpeechManager class. It extends NSObject (a base class from
-// Apple's Objective-C runtime) and conforms to the SFSpeechRecognizerDelegate
-// protocol. Extending NSObject is required for delegate patterns in Apple's
+// Apple's Objective-C runtime). On iOS, it also conforms to the
+// SFSpeechRecognizerDelegate protocol (added via extension below).
+// Extending NSObject is required for delegate patterns in Apple's
 // frameworks. The delegate protocol lets us receive events from the speech
 // recognizer (like availability changes).
-class SpeechManager: NSObject, SFSpeechRecognizerDelegate {
+class SpeechManager: NSObject {
     // Create a single shared instance that the whole app uses (singleton
     // pattern). `static` means this property belongs to the class itself,
     // not to any instance. We use `shared` as a conventional name so other
     // code can access it as `SpeechManager.shared`.
     static let shared = SpeechManager()
 
+    // ── iOS-only: Speech Recognition Properties ─────────────────
+    // These properties use types from the Speech framework, which is
+    // only available on Apple platforms that support speech recognition.
+    // On macOS (for compilation testing), these are excluded.
+    #if os(iOS)
     // Create the speech recognizer for US English. SFSpeechRecognizer is
     // Apple's class that converts audio to text. We specify "en-US" locale
     // so it expects American English. `private let` means it's a constant
@@ -272,8 +283,30 @@ class SpeechManager: NSObject, SFSpeechRecognizerDelegate {
         // function "pauses" until continuation.resume() is called above.
     }
     // Close the recognize function.
+    #else
+    // ── macOS stub implementation ───────────────────────────────
+    // On platforms without the Speech framework, we provide a stub
+    // that returns a dummy command so the rest of the app compiles
+    // and can be tested for syntax and logic errors.
+    func recognize() async -> String? {
+        // Log that speech is not available on this platform.
+        print("SpeechManager.recognize() not available on this platform.")
+        // Return a test string so the caller doesn't get nil.
+        return "test command"
+    }
+    #endif
 }
-// Close the SpeechManager class.
+
+// ─── iOS-only: Delegate + Async Extensions ───────────────────────────
+// These extensions require the Speech framework, so they're only
+// compiled on iOS.
+#if os(iOS)
+
+// Add SFSpeechRecognizerDelegate conformance to SpeechManager.
+// This lets us receive events from the speech recognizer, like
+// availability changes.
+extension SpeechManager: SFSpeechRecognizerDelegate {
+}
 
 // ─── Async Extension ─────────────────────────────────────────────────
 // Add a new static function to SFSpeechRecognizer (Apple's class) that
@@ -305,3 +338,5 @@ extension SFSpeechRecognizer {
     // Close the requestAuthorizationAsync function.
 }
 // Close the extension block.
+
+#endif

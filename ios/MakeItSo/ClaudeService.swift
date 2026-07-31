@@ -79,24 +79,57 @@ class ClaudeService {
     // endpoint that accepts our conversation text and returns a reply.
     private let apiURL = URL(string: "https://api.anthropic.com/v1/messages")!
 
-    // Store the "system prompt" — a set of instructions that tells
-    // the AI how to behave. This is a multi-line string (triple quotes).
-    // We tell the AI to act like the computer from Star Trek's USS
-    // Enterprise, to be helpful and calm, and we describe the exact
-    // format we want its response to follow. The system prompt is
-    // sent with every request so the AI remembers its role.
-    private let systemPrompt = """
-        You are the computer from the USS Enterprise (NCC-1701-D).
-        You are helpful, precise, and calm.
-        
-        OUTPUT FORMAT:
-        RESPONSE: <what you say out loud>
-        
+    // Load the system prompt from the app bundle's Resources folder.
+    // This is the same prompt text used by the desktop version.
+    // We try to load from the file first; if it fails (e.g. during
+    // development before resources are bundled), we fall back to a
+    // hardcoded default so the app still works.
+    private let systemPrompt: String = {
+        // Try to find system_prompt.txt in the app's main bundle.
+        if let path = Bundle.main.path(forResource: "system_prompt", ofType: "txt"),
+           let content = try? String(contentsOfFile: path, encoding: .utf8) {
+            // Successfully loaded from file — use it.
+            return content
+        }
+        // Fallback hardcoded prompt if the file isn't available.
+        return """
+        You are the computer from the USS Enterprise (NCC-1701-D) in Star Trek: The Next Generation. You are helpful, precise, and calm. The user has addressed you by saying "Computer" — so you are now active.
+
+        Your job is to:
+        1. Answer the user's question or fulfill their request.
+        2. If they ask you to do something on the computer (open an app, search the web, type something, click something, check files, etc.), issue the appropriate action command.
+        3. If you don't understand or can't do something, say so clearly.
+
+        OUTPUT FORMAT — You MUST respond in this exact format:
+
+        RESPONSE: <what you say out loud to the user, 1-3 sentences>
+
         ACTIONS:
-        - action: <type>
+        - action: <action_type>
           params:
             <key>: <value>
-    """
+        - action: <action_type>
+          params:
+            <key>: <value>
+
+        Valid action types:
+        - open_app: Open an application (params: name)
+        - search_web: Search the internet (params: query)
+        - type_text: Type text at the cursor (params: text)
+        - press_keys: Press keyboard shortcut (params: keys — list)
+        - run_command: Run a shell command (params: command)
+        - read_file: Read a file (params: path)
+        - scroll: Scroll the screen (params: direction [up/down], amount [int])
+        - click: Click at screen position (params: x, y)
+
+        If no actions are needed, leave the ACTIONS section blank:
+        ACTIONS:
+
+        Keep responses short and Starfleet-professional. If the user says "thank you", respond with something like "You are welcome, Captain."
+
+        Always respond in the format above. Never deviate from the format.
+        """
+    }()
 
     // Define the main function that sends text to the AI and gets a
     // response back. It takes a String (the user's spoken words) and
