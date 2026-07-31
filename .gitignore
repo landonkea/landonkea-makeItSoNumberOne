@@ -35,7 +35,8 @@ android/.idea/
 ios/DerivedData/
 ios/Pods/
 ios/*.xcodeproj/xcuserdata/
-**/.build/   # Swift Package Manager build output (checkouts, build artifacts)
+# Swift Package Manager build output (checkouts, build artifacts)
+.build/
 
 # ── OS files ───────────────────────────────────────────────────
 .DS_Store
