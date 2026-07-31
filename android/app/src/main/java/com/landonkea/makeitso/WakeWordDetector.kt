@@ -11,57 +11,203 @@
 // PREREQUISITE
 // ------------
 // You need a free Picovoice AccessKey from console.picovoice.ai
-// and the pvporcupine AAR library for Android.
+// and the pvporcupine AAR library for Android (already added to
+// build.gradle.kts as a Maven Central dependency).
+//
+// ACCESS KEY SETUP
+// ----------------
+// 1. Go to https://console.picovoice.ai/ and sign up for free
+// 2. Copy your AccessKey (starts with "tB/M/..." or similar)
+// 3. Set it in app/build.gradle.kts -> PICOVOICE_ACCESS_KEY
+//    OR pass it as a system property: -Dpicovoice.access.key=...
+//
+// The free tier allows unlimited wake word detection on-device.
 // ───────────────────────────────────────────────────────────────────
 
+// This line declares the package (namespace) this file belongs to.
 package com.landonkea.makeitso
 
+// ── Android system imports ────────────────────────────────────────
+// Context gives access to the app's resources and assets — Porcupine
+// needs it to load its native model from the APK.
 import android.content.Context
+// AudioRecord is the Android API for capturing raw audio frames
+// from the microphone. We use it to feed PCM data to Porcupine.
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
+
+// ── Coroutine imports ─────────────────────────────────────────────
+// Dispatchers provides thread pools — IO for audio capture work.
 import kotlinx.coroutines.Dispatchers
+// withContext lets us switch which coroutine dispatcher we run on.
 import kotlinx.coroutines.withContext
 
-object WakeWordDetector {
+// ── Picovoice Porcupine import ────────────────────────────────────
+// Porcupine is the on-device wake word detection engine.
+// The library is provided by the porcupine-android AAR dependency.
+import ai.picovoice.porcupine.Porcupine
+// BuiltInKeyword lists the pre-built wake words that ship with
+// Porcupine — we use "COMPUTER" (matching the desktop version).
+import ai.picovoice.porcupine.Porcupine.BuiltInKeyword
 
-    // ── Detect "Computer" wake word ─────────────────────────────
-    // This is a SUSPEND function (runs in background coroutine).
-    // It listens to the microphone until "Computer" is detected,
-    // then returns true.
-    suspend fun detect(context: Context): Boolean = withContext(Dispatchers.IO) {
-        try {
-            // ── Initialize Porcupine ────────────────────────────
-            // Load the Porcupine wake word engine with "Computer".
-            // This requires the pvporcupine-android library.
-            //
-            // NOTE: The Porcupine Android SDK is distributed as an
-            // AAR file. You need to add it to your project:
-            //   1. Download from picovoice.ai
-            //   2. Place in app/libs/
-            //   3. Add to build.gradle.kts:
-            //      implementation(files("libs/pvporcupine-android.aar"))
+// ── Callback interface ────────────────────────────────────────────
+// Activities or fragments can implement this interface to receive
+// wake word detection events asynchronously.
+interface WakeWordCallback {
+    // Called when "Computer" is detected (keywordIndex >= 0).
+    fun onWakeWordDetected()
+    // Called if Porcupine initialization or audio capture fails.
+    fun onError(error: String)
+}
 
-            // For now, we simulate the wake word detection since
-            // the actual Porcupine library needs manual setup.
-            // In production, you would use:
-            //
-            // val porcupine = Porcupine.create(
-            //     accessKey = "your-access-key",
-            //     keywords = listOf("computer")
-            // )
-            //
-            // Then in a loop:
-            // val keywordIndex = porcupine.process(audioFrame)
-            // if (keywordIndex >= 0) { return@withContext true }
-            //
-            // See the desktop Python version for the full pattern.
+// WakeWordDetector is now a CLASS (not a singleton object) because
+// each instance holds its own Porcupine engine handle.
+class WakeWordDetector(
+    // The Android Context (application/activity) — Porcupine's Builder
+    // needs it to load the native model bundled in the APK.
+    private val context: Context,
+    // The Picovoice Access Key from console.picovoice.ai.
+    // If empty, the detector falls back to button-based activation
+    // (detect() returns true immediately).
+    private val picovoiceAccessKey: String
+) {
 
-            // ── Placeholder: button-based activation ────────────
-            // Since we can't bundle Porcupine without manual setup,
-            // we use Android's built-in speech recognizer to listen
-            // for "Computer" as a simpler alternative.
+    // ── Porcupine engine instance ──────────────────────────────────
+    // This is the wake word detection engine. It's created during
+    // init (see below) and released in destroy(). It's nullable so
+    // we can handle the case where the access key is empty or
+    // Porcupine fails to initialize.
+    private var porcupine: Porcupine? = null
+
+    // ── Initialization block ───────────────────────────────────────
+    // Runs when the class is instantiated (constructor is called).
+    // We create the Porcupine engine here so it's ready to detect.
+    init {
+        // Only try to initialize Porcupine if we have an access key.
+        if (picovoiceAccessKey.isNotEmpty()) {
+            try {
+                // Porcupine 3.x uses a Builder pattern. We configure it
+                // with our access key and the built-in "computer"
+                // keyword, then build() loads the native engine.
+                porcupine = Porcupine.Builder()
+                    // The API key from console.picovoice.ai.
+                    .setAccessKey(picovoiceAccessKey)
+                    // The wake word to listen for. COMPUTER is one of
+                    // the built-in keywords that ships with the
+                    // library (no custom PPn model file needed).
+                    .setKeyword(BuiltInKeyword.COMPUTER)
+                    // Requires a Context to load the native model
+                    // files from the APK's assets.
+                    .build(context)
+            } catch (e: Exception) {
+                // If Porcupine fails to init (bad key, no native libs,
+                // etc.), we log the error and fall back to button mode.
+                e.printStackTrace()
+            }
+        }
+        // If picovoiceAccessKey is empty, porcupine stays null and
+        // detect() will fall back to returning true immediately.
+    }
+
+    // ── Cleanup ────────────────────────────────────────────────────
+    // Releases the Porcupine engine's native resources.
+    // Call this from your activity's onDestroy() or when you no
+    // longer need wake word detection.
+    fun destroy() {
+        // delete() releases Porcupine's native memory (model, etc.).
+        porcupine?.delete()
+        // Null out the reference so it can't be used accidentally.
+        porcupine = null
+    }
+
+    // ── Wake word detection ────────────────────────────────────────
+    // This is a SUSPEND function (runs on a background thread via
+    // Dispatchers.IO). It listens to the microphone until "Computer"
+    // is detected, then returns true.
+    //
+    // If no Porcupine engine is available (no access key or init
+    // failed), it immediately returns true (button-based fallback).
+    suspend fun detect(): Boolean = withContext(Dispatchers.IO) {
+        // ── Check if Porcupine is ready ────────────────────────────
+        val engine = porcupine
+        // If Porcupine is null (no key or init failed), fall back to
+        // button-based activation: return true immediately so the
+        // UI button still works as a manual trigger.
+        if (engine == null) {
             return@withContext true
+        }
+
+        // ── Real Porcupine wake word detection ─────────────────────
+        try {
+            // Porcupine records at 16 kHz (sampleRate = 16000).
+            val sampleRate = engine.sampleRate
+            // Each audio frame is a fixed number of PCM samples.
+            val frameLength = engine.frameLength
+            // Buffer to hold one frame of 16-bit PCM audio samples.
+            val buffer = ShortArray(frameLength)
+
+            // Calculate the minimum buffer size Android's AudioRecord
+            // needs for stable capture at this sample rate/format.
+            val minBufferSize = AudioRecord.getMinBufferSize(
+                sampleRate,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT
+            )
+            // Use at least frameLength * 2 bytes (one frame of shorts)
+            // but honor the platform's minimum if it's larger.
+            val bufferSize = maxOf(frameLength * 2, minBufferSize)
+
+            // ── Create the AudioRecord instance ────────────────────
+            // This opens the device's microphone for raw PCM capture.
+            val audioRecord = AudioRecord(
+                // MIC is the built-in phone microphone.
+                MediaRecorder.AudioSource.MIC,
+                // Must match Porcupine's sample rate (16000 Hz).
+                sampleRate,
+                // Porcupine expects mono audio (single channel).
+                AudioFormat.CHANNEL_IN_MONO,
+                // Porcupine expects 16-bit signed little-endian PCM.
+                AudioFormat.ENCODING_PCM_16BIT,
+                // Total buffer size in bytes (2 bytes per sample).
+                bufferSize
+            )
+
+            // ── Start capturing audio from the microphone ──────────
+            audioRecord.startRecording()
+
+            // ── Read and process audio frames in a loop ────────────
+            // audioRecord.read() fills the buffer with PCM samples
+            // and returns the number of shorts read (or negative on
+            // error). We keep reading until Porcupine finds the
+            // wake word.
+            while (audioRecord.read(buffer, 0, buffer.size) >= 0) {
+                // Pass the audio frame to Porcupine. It returns the
+                // index of the detected keyword (0 for the first
+                // keyword in the set) or -1 if no keyword found.
+                val keywordIndex = engine.process(buffer)
+                // If keywordIndex >= 0, "Computer" was detected!
+                if (keywordIndex >= 0) {
+                    // Stop and release the microphone immediately.
+                    audioRecord.stop()
+                    audioRecord.release()
+                    // Return true — wake word was spoken.
+                    return@withContext true
+                }
+            }
+
+            // ── Cleanup (loop exited without detection) ────────────
+            audioRecord.stop()
+            audioRecord.release()
+            // Return false — wake word was not detected (unlikely
+            // to reach here since read() blocks until detected or
+            // an error occurs).
+            return@withContext false
 
         } catch (e: Exception) {
+            // Log the error to Logcat for debugging.
             e.printStackTrace()
+            // Return false so the caller knows detection failed.
             return@withContext false
         }
     }

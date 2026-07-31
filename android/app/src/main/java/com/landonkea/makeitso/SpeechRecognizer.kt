@@ -12,6 +12,15 @@
 // 2. Android shows a mic dialog (or runs in background mode)
 // 3. The user speaks, Android returns the transcribed text
 // 4. We pass that text to Claude
+//
+// COROUTINE BRIDGE
+// ----------------
+// Android's speech recognition is callback-based (onActivityResult).
+// We bridge this to coroutines using CompletableDeferred:
+//   1. recognize() stores a CompletableDeferred in pendingRequests
+//   2. It starts the recognition intent
+//   3. When onActivityResult fires, handleResult() completes the deferred
+//   4. recognize() resumes with the transcribed text
 // ───────────────────────────────────────────────────────────────────
 
 // This line declares the package (namespace) this file belongs to, matching the folder structure.
@@ -28,19 +37,28 @@ import android.content.Intent
 import android.speech.RecognizerIntent
 // Dispatchers provides coroutine thread pools — Main for UI, IO for network, Default for CPU work.
 import kotlinx.coroutines.Dispatchers
-// suspendCancellableCoroutine is a low-level coroutine builder that lets us bridge callback-based APIs
-// (like speech recognition results) with coroutine code.
-import kotlinx.coroutines.suspendCancellableCoroutine
 // withContext lets a coroutine switch which thread pool it runs on.
 import kotlinx.coroutines.withContext
 // Locale represents a language/region pair (e.g., en_US) used to set the speech recognizer's language.
 import java.util.Locale
-// resume() is called on a coroutine continuation to pass a result back and un-pause the coroutine.
-import kotlin.coroutines.resume
+// CompletableDeferred is a one-shot value carrier that can be completed from outside a coroutine,
+// used to bridge callback-based APIs (like onActivityResult) with coroutine code.
+import kotlinx.coroutines.CompletableDeferred
+// ConcurrentHashMap is a thread-safe map used to store pending recognition requests
+// by their request code so onActivityResult can find and complete them.
+import java.util.concurrent.ConcurrentHashMap
 
 // "object" creates a singleton — exactly one SpeechRecognizer instance exists for the whole app.
 // It wraps Android's speech recognition in a clean, coroutine-friendly function.
 object SpeechRecognizer {
+
+    // ── Pending request storage ────────────────────────────────────
+    // This map bridges the callback-based onActivityResult to coroutines.
+    // Key:   the request code (e.g., 2000) used in startActivityForResult
+    // Value: a CompletableDeferred that will be completed when the result arrives
+    // ConcurrentHashMap ensures thread safety since onActivityResult runs on the main thread
+    // and the coroutine might be on a different thread.
+    private val pendingRequests = ConcurrentHashMap<Int, CompletableDeferred<String?>>()
 
     // ── Transcribe speech to text ───────────────────────────────
     // This launches Android's built-in speech recognition and
@@ -76,34 +94,30 @@ object SpeechRecognizer {
                     "Say your command for the Computer..."
                 )
 
-                // We use a coroutine-friendly pattern to wait for
-                // the result from the speech recognizer.
-                // suspendCancellableCoroutine creates a coroutine that pauses until we manually resume it.
-                val result = suspendCancellableCoroutine<String?> { continuation ->
-                    // Start the speech recognition activity. Android shows the mic dialog.
-                    // 2000 is a request code used in onActivityResult() to identify this request.
-                    activity.startActivityForResult(intent, 2000)
+                // ── Create a one-shot bridge to the coroutine ────
+                // CompletableDeferred is like a "promise" that can be
+                // fulfilled exactly once from any thread. We store it
+                // in the pendingRequests map so onActivityResult can
+                // find it later and call .complete() with the result.
+                val requestCode = 2000
+                val deferred = CompletableDeferred<String?>()
+                // Store the deferred in the map before starting the activity,
+                // so there's no race condition between onActivityResult and this code.
+                pendingRequests[requestCode] = deferred
 
-                    // Note: In a real implementation, you'd override
-                    // onActivityResult in the Activity and use a
-                    // callback. For simplicity here, we simulate
-                    // the result.
-                    //
-                    // The actual implementation would look like:
-                    //   val results = data
-                    //       .getStringArrayListExtra(
-                    //           RecognizerIntent.EXTRA_RESULTS
-                    //       )
-                    //   continuation.resume(results?.firstOrNull())
-                    //
-                    // For now, we return null (to be implemented
-                    // when you build in Android Studio).
-                    // If we don't call continuation.resume(), the coroutine hangs forever.
-                    // The continuation is what "un-pauses" the coroutine with the speech result.
-                }
-                // End of suspendCancellableCoroutine block. result holds whatever was passed to resume().
+                // Start the speech recognition activity. Android shows the mic dialog.
+                activity.startActivityForResult(intent, requestCode)
 
-                // Return the transcribed text (or null if recognition failed or wasn't implemented yet).
+                // Await the result. This suspends the coroutine until
+                // handleResult() is called from onActivityResult.
+                // If the activity is destroyed (e.g., user presses back),
+                // the deferred will be cancelled and this throws.
+                val result = deferred.await()
+
+                // Remove the request from the map to avoid memory leaks.
+                pendingRequests.remove(requestCode)
+
+                // Return the transcribed text (or null if recognition failed).
                 return@withContext result
 
             } catch (e: Exception) {
@@ -118,5 +132,45 @@ object SpeechRecognizer {
         // End of withContext(Dispatchers.Main) — execution continues on the original thread.
     }
     // End of recognize() function.
+
+    // ── Handle the activity result ───────────────────────────────
+    // This function should be called from the Activity's onActivityResult():
+    //
+    //   override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+    //       super.onActivityResult(requestCode, resultCode, data)
+    //       SpeechRecognizer.handleResult(requestCode, resultCode, data)
+    //   }
+    //
+    // It extracts the transcribed speech from the result Intent and
+    // completes the pending CompletableDeferred, which un-pauses the
+    // coroutine waiting in recognize().
+    //
+    // Parameters:
+    //   requestCode: The code passed to startActivityForResult (should be 2000).
+    //   resultCode:  Activity.RESULT_OK if recognition succeeded, RESULT_CANCELED if user backed out.
+    //   data:        The Intent containing the transcribed speech results.
+    fun handleResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        // Look up the pending deferred for this request code.
+        val deferred = pendingRequests[requestCode] ?: return
+
+        // Check if recognition was successful (user spoke and the recognizer got a result).
+        if (resultCode == Activity.RESULT_OK && data != null) {
+            // Extract the list of transcribed results from the Intent.
+            // EXTRA_RESULTS is an ArrayList<String> sorted by confidence (best first).
+            val results = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            // Get the most confident transcription, or null if the list is empty.
+            val text = results?.firstOrNull()
+            // Complete the deferred with the transcribed text (could be null if empty result).
+            // This un-pauses the coroutine waiting in recognize().
+            deferred.complete(text)
+        } else {
+            // Recognition was cancelled or failed (user pressed back, mic error, etc.).
+            // Complete with null to signal to the caller that nothing was transcribed.
+            deferred.complete(null)
+        }
+        // Clean up: remove the request from the map to prevent memory leaks.
+        pendingRequests.remove(requestCode)
+    }
+    // End of handleResult().
 }
 // End of SpeechRecognizer object.

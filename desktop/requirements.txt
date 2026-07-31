@@ -22,7 +22,7 @@ pyyaml>=6.0
 # Runs speech recognition locally. Download a model from:
 # https://alphacephei.com/vosk/models
 # Extract to: desktop/models/vosk-model-small-en-us-0.15/
-vosk>=0.3.45
+vosk>=0.3.44
 
 # ── System control (optional, for mouse/keyboard actions) ─────
 # Uncomment if you want Claude to click, type, and control your PC.

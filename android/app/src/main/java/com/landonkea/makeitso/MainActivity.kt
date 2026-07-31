@@ -25,6 +25,8 @@ package com.landonkea.makeitso
 
 // Manifest contains constant strings for Android permissions (like RECORD_AUDIO).
 import android.Manifest
+// Intent is a messaging object that Android uses to start activities and pass data between them.
+import android.content.Intent
 // PackageManager lets us check whether the user has granted certain permissions.
 import android.content.pm.PackageManager
 // Bundle is a key-value container used to pass data between activities and save/restore state.
@@ -55,6 +57,8 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.*
 // Locale represents a specific geographical/political region (e.g., US English for TTS voice).
 import java.util.Locale
+// BuildConfig is auto-generated from build.gradle.kts (holds API keys, etc.).
+import com.landonkea.makeitso.BuildConfig
 
 // MainActivity is the entry point of the app — it's the screen that appears when the app launches.
 // ComponentActivity is the standard base for Android activities using Jetpack Compose.
@@ -90,6 +94,22 @@ class MainActivity : ComponentActivity() {
     // This can be loaded from a config file or shared preferences in the future.
     // For now it's hardcoded to "auto" to give the best user experience.
     private val assistantMode = "auto"
+
+    // ── Picovoice Access Key ────────────────────────────────────
+    // Reads the Porcupine wake word key from a system property first
+    // (useful for testing), then falls back to BuildConfig (set in
+    // app/build.gradle.kts -> PICOVOICE_ACCESS_KEY).
+    private val picovoiceAccessKey: String by lazy {
+        System.getProperty("picovoice.access.key") ?: BuildConfig.PICOVOICE_ACCESS_KEY
+    }
+
+    // ── Wake word detector ──────────────────────────────────────
+    // Created lazily (on first access) so we don't block onCreate
+    // with Porcupine model loading. The detector manages its own
+    // AudioRecord and Porcupine lifecycle internally.
+    private val wakeWordDetector: WakeWordDetector by lazy {
+        WakeWordDetector(this, picovoiceAccessKey)
+    }
 
     // ── Activity lifecycle ──────────────────────────────────────
     // onCreate() is called when Android first creates the activity (the app starts or resumes).
@@ -138,10 +158,26 @@ class MainActivity : ComponentActivity() {
         tts?.stop()
         // Release all TTS resources (the engine, audio focus, etc.).
         tts?.shutdown()
+        // Release the Porcupine wake word engine's native resources.
+        wakeWordDetector.destroy()
         // Always call the parent class's onDestroy for proper cleanup.
         super.onDestroy()
     }
     // End of onDestroy().
+
+    // ── Handle activity results (from speech recognition) ────────
+    // This is called by Android when an activity that we started with
+    // startActivityForResult() finishes (e.g., the speech recognition dialog).
+    // We delegate to SpeechRecognizer.handleResult() which bridges the
+    // result back to the coroutine that launched the recognizer.
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        // Always call the parent implementation first for standard Android behavior.
+        super.onActivityResult(requestCode, resultCode, data)
+        // Delegate to SpeechRecognizer which extracts the transcribed text
+        // from the result and completes the pending coroutine.
+        SpeechRecognizer.handleResult(requestCode, resultCode, data)
+    }
+    // End of onActivityResult().
 
     // ── Start the voice assistant ────────────────────────────────
     // This function launches the main assistant cycle in a background coroutine.
@@ -169,8 +205,8 @@ class MainActivity : ComponentActivity() {
             // STEP 1: Wait for the wake word "Computer".
             // Update the UI text to show we're listening for the wake word.
             assistantState = "🎤 Listening for 'Computer'..."
-            // Call WakeWordDetector.detect() which listens for "Computer" and returns true/false.
-            val wakeWordDetected = WakeWordDetector.detect(this)
+            // Call wakeWordDetector.detect() which listens for "Computer" and returns true/false.
+            val wakeWordDetected = wakeWordDetector.detect()
             // If the wake word was NOT detected within the listening window...
             if (!wakeWordDetected) {
                 // ...tell the user and stop the assistant cycle.
@@ -231,7 +267,7 @@ class MainActivity : ComponentActivity() {
                 // Loop through each action in the list and execute them one by one.
                 for (action in result.actions) {
                     // Update the UI to show which action is being executed right now.
-                    lastAction = "Executing: ${action.action}"
+                    lastAction = "Executing: ${action.type}"
                     // Call ActionRouter.execute() to perform the action (open app, search web, etc.).
                     ActionRouter.execute(action)
                 }

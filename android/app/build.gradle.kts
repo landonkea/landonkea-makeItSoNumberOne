@@ -1,35 +1,26 @@
-# ───────────────────────────────────────────────────────────────────
-# App module build file — what dependencies the app needs
-# ───────────────────────────────────────────────────────────────────
-# This file tells Gradle:
-#   1. What version of Android SDK to compile against
-#   2. What libraries (dependencies) the app uses
-#   3. What minimum Android version to support
-# ───────────────────────────────────────────────────────────────────
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
     namespace = "com.landonkea.makeitso"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.landonkea.makeitso"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
+        buildConfigField("String", "ANTHROPIC_API_KEY", "\"YOUR_API_KEY_HERE\"")
+        buildConfigField("String", "PICOVOICE_ACCESS_KEY", "\"YOUR_PICOVOICE_KEY\"")
     }
 
     buildFeatures {
         compose = true
-    }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.5"
+        buildConfig = true
     }
 
     compileOptions {
@@ -60,6 +51,13 @@ dependencies {
 
     // ── JSON parsing (for API responses) ─────────────────────
     implementation("org.json:json:20231013")
+
+    // ── Wake word detection (Picovoice Porcupine) ─────────────
+    // Enables on-device "Computer" wake word detection.
+    // Requires a free access key from https://console.picovoice.ai/
+    // and setting PICOVOICE_ACCESS_KEY (BuildConfig or system property).
+    // Falls back to button activation if the key is empty.
+    implementation("ai.picovoice:porcupine-android:3.0.2")
 
     // ── Offline mode (Ollama) ──────────────────────────────────
     // No additional dependencies needed for offline mode — it reuses
