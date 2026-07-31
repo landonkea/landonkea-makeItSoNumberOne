@@ -290,7 +290,7 @@ struct ContentView: View {
     private func runAssistantCycle() async {
         // STEP 1: Show that we're waiting for the wake word "Computer".
         // The await here means the UI updates before we continue.
-        await updateState("🎤 Listening for 'Computer'...")
+        updateState("🎤 Listening for 'Computer'...")
 
         // On a real iPhone, we'd use SFSpeechRecognizer to continuously
         // listen for the wake word. For this first version, the button
@@ -301,20 +301,20 @@ struct ContentView: View {
         // STEP 2: Play the acknowledgment chime (the Star Trek sound).
         // Before we listen for the actual command, we show detected state
         // so the user knows the wake word was recognized.
-        await updateState("🔺 'Computer' detected!")
+        updateState("🔺 'Computer' detected!")
         // Play the Star Trek chime sound from the app's bundled audio file.
         playChime()
 
         // STEP 3: Listen for the user's spoken command.
         // Show that we're now listening for what the user wants to do.
-        await updateState("🎧 Listening for your command...")
+        updateState("🎧 Listening for your command...")
         // Call SpeechManager to start recording and transcribing speech.
         // The `await` pauses until the user stops speaking and we have
         // the transcribed text. `guard let` unwraps the optional — if
         // recognition failed (returned nil), we show an error and exit.
         guard let speechText = await SpeechManager.shared.recognize() else {
             // Show a message telling the user we couldn't hear them.
-            await updateState("Could not hear you. Try again.")
+            updateState("Could not hear you. Try again.")
             // Exit the function — we can't proceed without user input.
             return
         }
@@ -327,13 +327,13 @@ struct ContentView: View {
         //   - Falls back to Ollama offline if mode is "auto" and Claude fails
         //   - Uses Ollama directly if mode is "offline"
         // Show a thinking indicator while we wait for the AI's reply.
-        await updateState("🧠 Thinking...")
+        updateState("🧠 Thinking...")
         // Call ClaudeService to process the text. The `await` pauses
         // while the network request (or local Ollama call) completes.
         // If it returns nil, something went wrong with both providers.
         guard let result = await ClaudeService.shared.process(speechText) else {
             // Show an error message if we couldn't get a valid response.
-            await updateState("AI did not respond. Check your connection or Ollama.")
+            updateState("AI did not respond. Check your connection or Ollama.")
             // Exit — we can't proceed without a valid response.
             return
         }
@@ -382,7 +382,7 @@ struct ContentView: View {
 
         // Update the state to show that everything completed successfully
         // and the user can start again by saying "Computer".
-        await updateState("✅ Complete. Say 'Computer' again.")
+        updateState("✅ Complete. Say 'Computer' again.")
         // Close the function — the cycle is finished.
     }
     // Close the runAssistantCycle function.
@@ -588,12 +588,11 @@ struct ContentView: View {
     // or may not be needed, so we provide a stub.
     private func requestMicrophonePermission() {
         #if canImport(UIKit)
-        // Get the shared audio session (the system's audio manager) and
-        // call requestRecordPermission. The system shows a dialog asking
-        // "Allow Make It So to access the microphone?" The closure runs
-        // after the user answers, receiving a `granted` boolean (true if
-        // they said yes, false if no).
-        AVAudioSession.sharedInstance().requestRecordPermission { granted in
+        // Request microphone access. iOS 17+ uses AVAudioApplication;
+        // the system shows a dialog asking "Allow Make It So to access
+        // the microphone?" The closure runs after the user answers,
+        // receiving a `granted` boolean (true if they said yes).
+        AVAudioApplication.requestRecordPermission { granted in
             // If the user denied permission (granted is false), we need
             // to update the UI to show a warning.
             if !granted {

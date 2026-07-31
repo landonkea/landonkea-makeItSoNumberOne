@@ -121,7 +121,7 @@ class WakeWordService {
                 //   4. errorHandler — callback if an error occurs
                 let manager = try PorcupineManager(
                     accessKey: accessKey,
-                    keywords: [PorcupineBuiltInKeyword.computer],
+                    keywords: [Porcupine.BuiltInKeyword.computer],
                     onDetection: { _ in
                         // The wake word was detected! Resume the
                         // continuation with true to unblock detect().
@@ -129,7 +129,7 @@ class WakeWordService {
                         // — since we only have one keyword, it's always 0.
                         continuation.resume(returning: true)
                     },
-                    errorHandler: { error in
+                    errorCallback: { error in
                         // An error occurred during detection (mic denied,
                         // audio session interrupted, etc.). Log it and
                         // resume with false so the caller knows detection
@@ -182,7 +182,9 @@ class WakeWordService {
         // Stop the audio engine and detection. This tells Porcupine to
         // stop capturing audio from the microphone, deactivate the audio
         // session, and release any audio resources it was using.
-        porcupineManager?.stop()
+        // stop() throws, but we don't care about the error here — this is
+        // cleanup, so try? safely ignores any failure.
+        try? porcupineManager?.stop()
         // Release the manager instance. Setting to nil lets Swift's ARC
         // (Automatic Reference Counting) deallocate the manager and all
         // its associated memory (audio buffers, keyword models, etc.).

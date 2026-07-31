@@ -1,0 +1,90 @@
+# ── project.yml — xcodegen spec for MakeItSo (iOS) ──────────────
+# This file is the SOURCE of truth for the Xcode project.
+# To regenerate the .xcodeproj after changing this file:
+#     xcodegen generate
+
+# "name:" is the Xcode project name (becomes .xcodeproj folder name).
+name: MakeItSo
+
+# "options:" controls how the project is generated.
+options:
+  # Minimum iOS version this app supports.
+  deploymentTarget:
+    iOS: "17.0"
+
+# "packages:" declares remote Swift Package dependencies.
+packages:
+  # Porcupine is Picovoice's on-device wake word engine.
+  # We use it to detect the word "Computer" (matches the desktop app).
+  Porcupine:
+    # The GitHub repo that hosts the Porcupine iOS package.
+    url: https://github.com/Picovoice/porcupine.git
+    # Use any 3.x release (semantic versioning: >=3.0.0, <4.0.0).
+    from: "3.0.0"
+
+# "targets:" defines what gets built.
+targets:
+  # "MakeItSo:" is the app target name.
+  MakeItSo:
+    # "type: application" makes this build into an installable .app.
+    type: application
+    # "platform: iOS" means this builds for iPhones and iPads.
+    platform: iOS
+    # "sources:" lists the Swift files + resources that belong to this app.
+    sources:
+      # Each Swift source file is listed explicitly so the project
+      # structure stays clean (no broad folder globs that can create
+      # duplicate group memberships).
+      - path: MakeItSoApp.swift
+      - path: ContentView.swift
+      - path: SpeechManager.swift
+      - path: ClaudeService.swift
+      - path: TTSService.swift
+      - path: ActionRouter.swift
+      - path: WakeWordService.swift
+      # The Resources folder holds the chime sound, system prompt,
+      # and Info.plist — bundled into the app automatically.
+      - path: Resources
+    # "settings:" applies build settings to this target.
+    settings:
+      base:
+        # The unique bundle identifier for the app.
+        PRODUCT_BUNDLE_IDENTIFIER: com.landonkea.MakeItSo
+        # Point Xcode at our hand-written Info.plist (holds the mic
+        # and speech-recognition usage descriptions required by iOS).
+        INFOPLIST_FILE: Resources/Info.plist
+        # Generate the launch screen using the system default.
+        GENERATE_INFOPLIST_FILE: YES
+        # The app entry point uses SwiftUI's @main — no storyboard needed.
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        # The app uses the microphone + speech recognition — those
+        # plist usage descriptions are already in Resources/Info.plist.
+        SUPPORTS_MACCATALYST: NO
+        # Build only for the device architectures Xcode runs on.
+        ONLY_ACTIVE_ARCH: YES
+        # Enable testability only for debug builds.
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+    # "dependencies:" lists frameworks/libraries the app links against.
+    dependencies:
+      # Porcupine — the on-device wake word engine ("Computer").
+      # The product name matches what `import Porcupine` expects.
+      # Limited to iOS because the Porcupine package is iOS-only.
+      - package: Porcupine
+        product: Porcupine
+        platforms: [iOS]
+      # Speech — SFSpeechRecognizer for transcribing voice commands.
+      - sdk: Speech.framework
+      # AVFoundation — audio recording + text-to-speech (AVAudioSession).
+      - sdk: AVFoundation.framework
+
+# "schemes:" defines run/test schemes for Xcode's toolbar.
+schemes:
+  # The scheme name shown in Xcode's scheme picker.
+  MakeItSo:
+    # "build:" configures which targets build in this scheme.
+    build:
+      targets:
+        MakeItSo: all
+    # "run:" configures how the app launches (on the simulator).
+    run:
+      config: Debug
