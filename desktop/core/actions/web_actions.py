@@ -12,11 +12,15 @@
 # text. This lets Claude "browse the web" to answer questions.
 # ───────────────────────────────────────────────────────────────────
 
-# Import the `requests` library to make HTTP requests over the internet.
-# HTTP requests are how your browser loads web pages — this library lets
-# our Python code do the same thing programmatically (without a browser).
-# We use it to call the DuckDuckGo API and to fetch web page content.
-import requests
+# NOTE: `requests` is deliberately imported inside search_web() below,
+# not here at the top of the file. If we imported it here and the
+# `requests` library wasn't installed, Python would raise ImportError
+# the moment this module gets loaded (which happens automatically at
+# startup via actions/__init__.py) — crashing the whole app before it
+# even starts, instead of showing the friendly "please pip install"
+# message below. Importing inside the function's try/except lets us
+# catch that case and fail gracefully, matching the pattern used in
+# ai.py and stt.py for the same reason.
 
 
 # Define a function named `search_web` that takes two parameters:
@@ -66,6 +70,11 @@ def search_web(query, config):
     # connection timeout, etc.), we catch the error and return a message
     # instead of crashing the entire voice assistant.
     try:
+        # Import here (not at the top of the file) so a missing
+        # `requests` library produces a friendly error message below
+        # instead of crashing the app at startup. See NOTE above.
+        import requests
+
         # ── DuckDuckGo Instant Answer API ────────────────────────
         # This API doesn't need any authentication — it's free and
         # open. Just send a GET request with the query.

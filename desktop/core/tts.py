@@ -136,10 +136,16 @@ def speak(text):
             # 3. Calls .Speak() with the text.
             # We use .replace() to escape any double quotes in the
             # text so they don't break the PowerShell command.
+            # NOTE: PowerShell's escape character is the backtick
+            # (`), not a backslash — inside a double-quoted string,
+            # a literal " must become `" (or ""). Using a backslash
+            # here (as you would in Python or C) does NOT escape
+            # anything in PowerShell, so a spoken response containing
+            # a quote character would have broken the command.
             ps_script = (
                 f'Add-Type -AssemblyName System.Speech; '
                 f'$s=New-Object System.Speech.Synthesis.SpeechSynthesizer; '
-                f'$s.Speak("{text.replace(\'"\', \'\\"\')}")'
+                f'$s.Speak("{text.replace(chr(34), chr(96) + chr(34))}")'
             )
             # Run the PowerShell command. "powershell" is the
             # program, "-Command" tells it to run a script string.

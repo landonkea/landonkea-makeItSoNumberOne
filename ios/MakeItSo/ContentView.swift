@@ -515,18 +515,18 @@ struct ContentView: View {
                     // on screen so the user knows the assistant is busy.
                     await MainActor.run { isProcessing = true }
 
-                    // Play the acknowledgment chime (Star Trek sound).
-                    // We call playChime directly (not through the full
-                    // runAssistantCycle) because we skip the manual wake
-                    // word step since Porcupine already detected it.
-                    playChime()
-
                     // Run the full assistant cycle: listen for command →
                     // send to AI → speak response → execute actions.
                     // We reuse the existing runAssistantCycle to keep
                     // the flow consistent between button and wake word.
-                    // Note: runAssistantCycle will show "Listening for
-                    // command..." and start speech recognition.
+                    // NOTE: We do NOT call playChime() here — we used to,
+                    // but runAssistantCycle() already plays the chime at
+                    // its own STEP 2 ("'Computer' detected!"), so calling
+                    // it here too made the chime play twice on every
+                    // wake-word trigger. runAssistantCycle handles the
+                    // whole "detected → chime → listen for command" flow
+                    // regardless of whether the button or the wake word
+                    // triggered it.
                     await runAssistantCycle()
 
                     // Reset the processing flag so the user can trigger

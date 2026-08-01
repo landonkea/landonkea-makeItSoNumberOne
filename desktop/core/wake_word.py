@@ -19,9 +19,6 @@
 #   porcupine_access_key: "your-key-here"
 # ───────────────────────────────────────────────────────────────────
 
-# Import the "os" module so we can work with file paths and the
-# operating system (like joining folder paths together).
-import os
 # Import the "struct" module so we can convert between Python data
 # and raw bytes (like turning microphone audio into numbers).
 import struct
@@ -134,41 +131,13 @@ def wait_for_wake_word(config):
         # Return False because we don't have a valid key.
         return False
 
-    # ── Path to the "Computer" wake word model file ───────────
-    # Porcupine requires a .ppn file for each wake word. The
-    # built-in "Computer" keyword is included with pvporcupine.
-    # We'll look for it in the pvporcupine package.
-    # Start with keyword_path set to None (meaning "no path yet").
-    keyword_path = None
-    # Try to find the built-in keyword file inside Porcupine's
-    # installed package folder.
-    try:
-        # Import Porcupine's internal module to access file paths.
-        import pvporcupine._porcupine as _pc  # Internal path info.
-        # Build the full path to the porcupine_params.pv file by
-        # joining the folder pvporcupine is installed in with
-        # "lib/common/porcupine_params.pv". os.path.join knows how
-        # to combine paths properly on any operating system.
-        keyword_path = os.path.join(
-            os.path.dirname(pvporcupine.__file__),
-            "lib", "common", "porcupine_params.pv"
-        )
-        # The built-in keyword "computer" is known by Porcupine
-        # and accessed by keyword index, not a file path.
-        # Porcupine's built-in keywords for English include
-        # "computer" as one of the available options.
-        # Set keyword_index to 0 because "computer" is typically
-        # the first built-in keyword in Porcupine's English list.
-        keyword_index = 0  # "computer" is usually built-in index 0.
-    # If anything goes wrong finding the built-in path (maybe a
-    # different version of Porcupine), don't crash — just handle it.
-    except Exception:
-        # Fall back to searching for the keyword file.
-        # Set keyword_path back to None so the code below uses
-        # a custom .ppn file path instead of the built-in keyword.
-        keyword_path = None
-
     # ── Initialize Porcupine ──────────────────────────────────
+    # NOTE: We pass `keywords=["computer"]` below, which tells
+    # pvporcupine to use its own bundled built-in "computer" model.
+    # pvporcupine finds that file internally — we don't need to
+    # locate it ourselves. (An earlier version of this function
+    # manually hunted for the model's file path here, but that
+    # result was never actually used anywhere, so it was removed.)
     # Print a status message so the user knows we're starting up.
     print("  [wake] Initializing wake word engine...")
     # Try to create a Porcupine instance. If it fails (bad key,

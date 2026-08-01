@@ -195,7 +195,10 @@ object ClaudeService {
                 val response = client.newCall(request).execute()
                 // Check if the server returned a success status code (200–299 range).
                 if (!response.isSuccessful) {
-                    // If the request failed (e.g., 400 Bad Request or 500 Server Error), return null.
+                    // If the request failed (e.g., 400 Bad Request or 500 Server Error), close
+                    // the response body before returning — otherwise this leaks the underlying
+                    // connection/stream since nothing else ever reads or closes it.
+                    response.close()
                     return@withContext null
                 }
 
@@ -300,7 +303,10 @@ object ClaudeService {
                 val response = client.newCall(request).execute()
                 // Check if the server returned a success status code (200–299 range).
                 if (!response.isSuccessful) {
-                    // If the request failed (e.g., Ollama isn't running or model not found), return null.
+                    // If the request failed (e.g., Ollama isn't running or model not found), close
+                    // the response body before returning — otherwise this leaks the underlying
+                    // connection/stream since nothing else ever reads or closes it.
+                    response.close()
                     return@withContext null
                 }
 

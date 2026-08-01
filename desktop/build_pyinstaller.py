@@ -208,10 +208,19 @@ def build():
         # This makes it behave like a normal Mac app (you can double-click
         # it from Finder without a terminal popping up).
         cmd.append("--windowed")
-        # Add the --icon flag to set the app's icon.
-        cmd.append("--icon")
-        # Point to the .icns icon file in the assets directory.
-        cmd.append(os.path.join(assets_dir, "icon.icns"))
+        # Add the --icon flag to set the app's icon, but only if an
+        # icon file actually exists. PyInstaller errors out (and the
+        # whole build fails) if you point --icon at a path that isn't
+        # there, and there's currently no icon.icns checked into
+        # assets/ — so skip the flag instead of breaking the build.
+        icon_path = os.path.join(assets_dir, "icon.icns")
+        if os.path.exists(icon_path):
+            cmd.append("--icon")
+            # Point to the .icns icon file in the assets directory.
+            cmd.append(icon_path)
+        else:
+            print(f"  [build] No icon.icns found in {assets_dir} — "
+                  f"building without a custom icon.")
 
     # The main Python script to bundle into the executable.
     # This is the entry point that runs when the user launches the app.

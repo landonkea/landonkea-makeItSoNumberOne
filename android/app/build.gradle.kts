@@ -23,6 +23,39 @@ android {
         buildConfig = true
     }
 
+    // ── Build types (debug vs release) ─────────────────────────
+    // No buildTypes were defined before, which meant every build
+    // used AGP's implicit defaults (release: minified+shrunk but
+    // unsigned; debug: unminified, auto-signed with the debug key).
+    // Making both explicit here documents that behavior and lets
+    // debug + release builds install side by side on one device.
+    buildTypes {
+        release {
+            // Shrinks and obfuscates code with R8, and strips unused
+            // resources — smaller APK, harder to reverse-engineer.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            // NOTE: there is no signingConfig here. Without one,
+            // `assembleRelease` produces an unsigned APK that can't
+            // be installed as-is — it needs a release keystore
+            // (signingConfigs { create("release") { ... } }) before
+            // it can be signed and published. Setting that up needs
+            // a real keystore/Play Console credentials, which is
+            // out of scope for this pass.
+        }
+        debug {
+            // Suffixing the debug applicationId lets a debug build
+            // be installed alongside a signed release build of the
+            // same app on the same device instead of overwriting it.
+            applicationIdSuffix = ".debug"
+            isMinifyEnabled = false
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

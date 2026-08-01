@@ -184,7 +184,20 @@ def execute_actions(action_list, config):
         print(f"  [router] Action {i+1}/{len(action_list)}:")
         # Call execute_action() to run this single action, passing
         # the action dict and the config. Store whatever it returns.
-        result = execute_action(action, config)
+        #
+        # This is wrapped in try/except because params come from
+        # Claude's text response, not validated user input. E.g. a
+        # "scroll" action with amount="a lot" instead of a number
+        # would raise ValueError inside int(). Without this guard,
+        # one malformed action would raise an uncaught exception and
+        # abort the ENTIRE batch, silently skipping every action
+        # after it. Catching it here means one bad action just
+        # reports an error while the rest of the list still runs.
+        try:
+            result = execute_action(action, config)
+        except Exception as e:
+            print(f"  [router]   -> Action failed: {e}")
+            result = f"Error: {e}"
         # Check if the result is truthy (not None, not empty string).
         if result:
             # Add the result message to our results list.

@@ -119,7 +119,7 @@ object ActionRouter {
             }
             // End of else/default case.
         }
-        // End of when(aciton.type) block.
+        // End of when(action.type) block.
     }
     // End of execute() function.
 }

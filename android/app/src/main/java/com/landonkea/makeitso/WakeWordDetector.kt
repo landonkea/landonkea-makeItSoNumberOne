@@ -42,6 +42,9 @@ import android.media.MediaRecorder
 import kotlinx.coroutines.Dispatchers
 // withContext lets us switch which coroutine dispatcher we run on.
 import kotlinx.coroutines.withContext
+// isActive lets us check whether the coroutine has been cancelled
+// (e.g. the activity was destroyed) so we can stop reading the mic.
+import kotlinx.coroutines.isActive
 
 // ── Picovoice Porcupine import ────────────────────────────────────
 // Porcupine is the on-device wake word detection engine.
@@ -139,6 +142,10 @@ class WakeWordDetector(
         }
 
         // ── Real Porcupine wake word detection ─────────────────────
+        // Declared outside the try block (and nullable) so the
+        // `finally` below can always reach it to release the mic,
+        // even if construction or reading throws partway through.
+        var audioRecord: AudioRecord? = null
         try {
             // Porcupine records at 16 kHz (sampleRate = 16000).
             val sampleRate = engine.sampleRate
@@ -160,7 +167,7 @@ class WakeWordDetector(
 
             // ── Create the AudioRecord instance ────────────────────
             // This opens the device's microphone for raw PCM capture.
-            val audioRecord = AudioRecord(
+            val record = AudioRecord(
                 // MIC is the built-in phone microphone.
                 MediaRecorder.AudioSource.MIC,
                 // Must match Porcupine's sample rate (16000 Hz).
@@ -172,36 +179,33 @@ class WakeWordDetector(
                 // Total buffer size in bytes (2 bytes per sample).
                 bufferSize
             )
+            audioRecord = record
 
             // ── Start capturing audio from the microphone ──────────
-            audioRecord.startRecording()
+            record.startRecording()
 
             // ── Read and process audio frames in a loop ────────────
             // audioRecord.read() fills the buffer with PCM samples
             // and returns the number of shorts read (or negative on
             // error). We keep reading until Porcupine finds the
-            // wake word.
-            while (audioRecord.read(buffer, 0, buffer.size) >= 0) {
+            // wake word. `isActive` is also checked so that if the
+            // activity is destroyed (coroutine cancelled) while we're
+            // mid-read, we stop promptly instead of holding the mic
+            // open until a wake word or read error eventually occurs.
+            while (isActive && record.read(buffer, 0, buffer.size) >= 0) {
                 // Pass the audio frame to Porcupine. It returns the
                 // index of the detected keyword (0 for the first
                 // keyword in the set) or -1 if no keyword found.
                 val keywordIndex = engine.process(buffer)
                 // If keywordIndex >= 0, "Computer" was detected!
                 if (keywordIndex >= 0) {
-                    // Stop and release the microphone immediately.
-                    audioRecord.stop()
-                    audioRecord.release()
-                    // Return true — wake word was spoken.
+                    // Return true — wake word was spoken. The mic is
+                    // released in `finally` below either way.
                     return@withContext true
                 }
             }
 
-            // ── Cleanup (loop exited without detection) ────────────
-            audioRecord.stop()
-            audioRecord.release()
-            // Return false — wake word was not detected (unlikely
-            // to reach here since read() blocks until detected or
-            // an error occurs).
+            // Loop exited without detection (cancelled or read error).
             return@withContext false
 
         } catch (e: Exception) {
@@ -209,6 +213,21 @@ class WakeWordDetector(
             e.printStackTrace()
             // Return false so the caller knows detection failed.
             return@withContext false
+        } finally {
+            // Always stop and release the microphone here — whether
+            // we returned true, false, or hit an exception above.
+            // Previously this cleanup only ran on the "happy paths",
+            // so an exception mid-read (or cancellation) would leak
+            // the AudioRecord and leave the mic locked.
+            audioRecord?.let {
+                try {
+                    it.stop()
+                } catch (e: Exception) {
+                    // stop() throws if recording never actually
+                    // started — safe to ignore, we're releasing anyway.
+                }
+                it.release()
+            }
         }
     }
 }
