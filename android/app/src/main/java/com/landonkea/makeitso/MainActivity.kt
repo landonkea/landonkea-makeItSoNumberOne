@@ -86,6 +86,20 @@ class MainActivity : ComponentActivity() {
     // "?" means it can be null (the TTS engine might not be available or isn't initialized yet).
     private var tts: TextToSpeech? = null
 
+    // ── Re-entrancy guard ────────────────────────────────────────
+    // Holds a reference to the currently running assistant-cycle coroutine (a "Job" is
+    // Kotlin's handle for a coroutine that lets you check if it's still running, or cancel it).
+    // WHY THIS EXISTS: without this guard, if the user taps the "Say 'Computer'" button twice
+    // quickly, startAssistant() would launch a SECOND runAssistantCycle() coroutine while the
+    // first one is still mid-flight. Both copies would then fight over the same microphone
+    // (wakeWordDetector and SpeechRecognizer both talk to the single physical mic), and worse,
+    // SpeechRecognizer always uses the same hardcoded requestCode (2000) for every recognition
+    // request — so the second cycle would silently overwrite the first cycle's pending listener
+    // in that map, leaving the first cycle's coroutine suspended forever waiting for a result
+    // that will never arrive (a permanent "leak" of that coroutine). Tracking the Job lets us
+    // simply ignore a new tap while a cycle is already running, which avoids all of that.
+    private var assistantJob: Job? = null
+
     // ── Config values ──────────────────────────────────────────
     // The operating mode for the assistant:
     //   "auto"    → try Claude API online first, fall back to Ollama offline if it fails
@@ -107,9 +121,19 @@ class MainActivity : ComponentActivity() {
     // Created lazily (on first access) so we don't block onCreate
     // with Porcupine model loading. The detector manages its own
     // AudioRecord and Porcupine lifecycle internally.
-    private val wakeWordDetector: WakeWordDetector by lazy {
+    //
+    // We spell this out as a named `Lazy<WakeWordDetector>` object (instead of the shorter
+    // "by lazy { ... }" property syntax) so that onDestroy() can later ask
+    // "has this actually been created yet?" via wakeWordDetectorLazy.isInitialized() WITHOUT
+    // forcing creation just to check. With the shorthand "by lazy" syntax there is no way to
+    // peek at a member property from outside without triggering it on first read.
+    private val wakeWordDetectorLazy: Lazy<WakeWordDetector> = lazy {
         WakeWordDetector(this, picovoiceAccessKey)
     }
+    // "by wakeWordDetectorLazy" delegates reads of wakeWordDetector to the Lazy object above —
+    // the first read runs the initializer block and caches the result; every later read just
+    // returns the cached WakeWordDetector instance.
+    private val wakeWordDetector: WakeWordDetector by wakeWordDetectorLazy
 
     // ── Activity lifecycle ──────────────────────────────────────
     // onCreate() is called when Android first creates the activity (the app starts or resumes).
@@ -158,8 +182,17 @@ class MainActivity : ComponentActivity() {
         tts?.stop()
         // Release all TTS resources (the engine, audio focus, etc.).
         tts?.shutdown()
-        // Release the Porcupine wake word engine's native resources.
-        wakeWordDetector.destroy()
+        // wakeWordDetector is created lazily (see the property declaration above), which means
+        // the object isn't actually built until the FIRST time something reads it. If the user
+        // closes the app without ever tapping "Say 'Computer'" (so wakeWordDetector.detect()
+        // was never called), then simply writing "wakeWordDetector.destroy()" here would itself
+        // trigger that first read — creating a brand-new Porcupine engine (loading its native
+        // model files) for the sole purpose of immediately destroying it again. That's wasted
+        // work during shutdown. isInitialized() on the Lazy object lets us check whether it was
+        // already built WITHOUT triggering creation, so we only clean up what actually exists.
+        if (wakeWordDetectorLazy.isInitialized()) {
+            wakeWordDetector.destroy()
+        }
         // Always call the parent class's onDestroy for proper cleanup.
         super.onDestroy()
     }
@@ -182,9 +215,18 @@ class MainActivity : ComponentActivity() {
     // ── Start the voice assistant ────────────────────────────────
     // This function launches the main assistant cycle in a background coroutine.
     private fun startAssistant() {
-        // scope.launch starts a new coroutine that runs on the scope's dispatcher (Default thread pool).
+        // Re-entrancy guard: "isActive" on a Job is true only while that coroutine is still
+        // running. If assistantJob is non-null AND still active, a cycle is already in
+        // progress (e.g. the user double-tapped the button), so we ignore this extra tap
+        // instead of starting a second overlapping cycle that would fight the first one for
+        // the microphone. See the assistantJob property comment above for why that matters.
+        if (assistantJob?.isActive == true) {
+            return
+        }
+        // scope.launch starts a new coroutine that runs on the scope's dispatcher (Default thread pool)
+        // and returns a Job handle for it, which we save so the guard above can check it next time.
         // This keeps the main UI thread free so the screen stays responsive.
-        scope.launch {
+        assistantJob = scope.launch {
             // Call the main assistant cycle function (which is a suspend function).
             runAssistantCycle()
         }
@@ -193,87 +235,39 @@ class MainActivity : ComponentActivity() {
 
     // ── The main cycle: wake → listen → think → speak → act ─────
     // "suspend" means this function can be paused without blocking the thread.
-    // It orchestrates the entire voice assistant flow step by step.
+    // This function's ONLY job is to run the six steps of one assistant interaction IN ORDER
+    // and stop early if any step fails. Each step's actual work lives in its own small,
+    // single-purpose function below (waitForWakeWord, listenForCommand, etc.) — that keeps this
+    // orchestrating function readable as a simple top-to-bottom story, and makes each step easy
+    // to understand (and fix) on its own.
     //
-    // The "think" step (step 4) now uses dual-mode processing:
+    // The "think" step now uses dual-mode processing:
     //   - Tries Claude API online first (requires internet + API key)
     //   - Falls back to Ollama on localhost:11434 if online fails
     //   - Mode is controlled by the assistantMode config variable
     private suspend fun runAssistantCycle() {
         // Wrap everything in try-catch so any unexpected error shows a message instead of crashing.
         try {
-            // STEP 1: Wait for the wake word "Computer".
-            // Update the UI text to show we're listening for the wake word.
-            assistantState = "🎤 Listening for 'Computer'..."
-            // Call wakeWordDetector.detect() which listens for "Computer" and returns true/false.
-            val wakeWordDetected = wakeWordDetector.detect()
-            // If the wake word was NOT detected within the listening window...
-            if (!wakeWordDetected) {
-                // ...tell the user and stop the assistant cycle.
-                assistantState = "Wake word not detected. Try again."
-                // Return early — don't continue to Steps 2-6.
-                return
-            }
-            // End of wake word check.
+            // STEP 1: Wait for the wake word "Computer". Returns early (via the elvis "?:")
+            // if it wasn't heard, so the rest of the cycle never runs.
+            waitForWakeWord() ?: return
 
-            // STEP 2: Play the Star Trek acknowledgment chime.
-            // Let the user know the wake word was heard.
+            // STEP 2: Play the Star Trek acknowledgment chime so the user knows they were heard.
             assistantState = "🔺 'Computer' detected!"
-            // Call playChime() to play the audio file (Star Trek computer sound).
             playChime()
 
-            // STEP 3: Listen for the user's command.
-            // Update the UI to show we're now listening for the actual command.
-            assistantState = "🎧 Listening for your command..."
-            // Call SpeechRecognizer.recognize() which returns transcribed text or null.
-            val speechText = SpeechRecognizer.recognize(this)
-            // If speech recognition failed or the user didn't say anything...
-            if (speechText == null) {
-                // ...show an error message and stop.
-                assistantState = "Could not hear you. Try again."
-                // Return early — don't continue to Steps 4-6.
-                return
-            }
-            // End of speech recognition check.
+            // STEP 3: Listen for the user's spoken command. Returns early if nothing was heard.
+            val speechText = listenForCommand() ?: return
 
-            // STEP 4: Send to the assistant for processing.
-            // Update the UI to show the assistant is thinking.
-            assistantState = "🧠 Thinking..."
-            // Call ClaudeService.process() which sends the text to the configured provider.
-            // The mode parameter controls the behavior:
-            //   "auto"    → try Claude API online first, fall back to Ollama offline
-            //   "online"  → use Claude API only
-            //   "offline" → use Ollama locally only
-            // The assistantMode is loaded from config (hardcoded to "auto" for now).
-            val result = ClaudeService.process(speechText, assistantMode)
-            // If the assistant didn't respond (null means all providers failed)...
-            if (result == null) {
-                // ...show an error and stop.
-                assistantState = "Assistant did not respond. Check network or start Ollama."
-                // Return early.
-                return
-            }
-            // End of assistant processing check.
+            // STEP 4: Send the transcribed text to the assistant (Claude/Ollama) for processing.
+            // Returns early if every provider failed.
+            val result = thinkAboutCommand(speechText) ?: return
 
-            // STEP 5: Speak the assistant's response aloud.
-            // Save the spoken text to lastResponse so it appears on screen.
-            lastResponse = result.spokenText
-            // Use TTS to speak the text aloud. QUEUE_FLUSH means stop any current speech and start this one.
-            tts?.speak(result.spokenText, TextToSpeech.QUEUE_FLUSH, null, null)
+            // STEP 5: Speak the assistant's response aloud and show it on screen.
+            speakResponse(result)
 
-            // STEP 6: Execute any actions the assistant requested.
-            // Only proceed if the assistant sent back one or more actions.
-            if (result.actions.isNotEmpty()) {
-                // Loop through each action in the list and execute them one by one.
-                for (action in result.actions) {
-                    // Update the UI to show which action is being executed right now.
-                    lastAction = "Executing: ${action.type}"
-                    // Call ActionRouter.execute() to perform the action (open app, search web, etc.).
-                    ActionRouter.execute(action)
-                }
-                // End of action loop.
-            }
-            // End of action check.
+            // STEP 6: Execute any actions the assistant requested (open app, search web, etc.).
+            executeActions(result.actions)
 
             // Done! Go back to waiting for the next wake word.
             assistantState = "✅ Complete. Say 'Computer' again."
@@ -285,6 +279,98 @@ class MainActivity : ComponentActivity() {
         // End of try-catch block.
     }
     // End of runAssistantCycle().
+
+    // ── Step 1: wait for the wake word ───────────────────────────
+    // Updates the UI, then blocks (suspends) until wakeWordDetector hears "Computer" or gives
+    // up. Returns Unit (a non-null placeholder value) on success so the caller can use
+    // "?: return" to bail out on failure, or null if the wake word was never detected.
+    private suspend fun waitForWakeWord(): Unit? {
+        // Update the UI text to show we're listening for the wake word.
+        assistantState = "🎤 Listening for 'Computer'..."
+        // Call wakeWordDetector.detect() which listens for "Computer" and returns true/false.
+        val wakeWordDetected = wakeWordDetector.detect()
+        // If the wake word was NOT detected within the listening window...
+        if (!wakeWordDetected) {
+            // ...tell the user and signal failure to the caller.
+            assistantState = "Wake word not detected. Try again."
+            return null
+        }
+        // Signal success. Unit is Kotlin's "no meaningful value, but not null" type.
+        return Unit
+    }
+    // End of waitForWakeWord().
+
+    // ── Step 3: listen for the user's spoken command ─────────────
+    // Updates the UI, then blocks until Android's speech recognizer returns transcribed text
+    // (or null if nothing could be understood).
+    private suspend fun listenForCommand(): String? {
+        // Update the UI to show we're now listening for the actual command.
+        assistantState = "🎧 Listening for your command..."
+        // Call SpeechRecognizer.recognize() which returns transcribed text or null.
+        val speechText = SpeechRecognizer.recognize(this)
+        // If speech recognition failed or the user didn't say anything...
+        if (speechText == null) {
+            // ...show an error message so the caller's "?: return" bails out with the UI updated.
+            assistantState = "Could not hear you. Try again."
+        }
+        return speechText
+    }
+    // End of listenForCommand().
+
+    // ── Step 4: send the command to the assistant for processing ─
+    // Updates the UI, then blocks until ClaudeService returns a result (or null if every
+    // provider — online Claude and offline Ollama — failed).
+    private suspend fun thinkAboutCommand(speechText: String): ClaudeResult? {
+        // Update the UI to show the assistant is thinking.
+        assistantState = "🧠 Thinking..."
+        // Call ClaudeService.process() which sends the text to the configured provider.
+        // The mode parameter controls the behavior:
+        //   "auto"    → try Claude API online first, fall back to Ollama offline
+        //   "online"  → use Claude API only
+        //   "offline" → use Ollama locally only
+        // The assistantMode is loaded from config (hardcoded to "auto" for now).
+        val result = ClaudeService.process(speechText, assistantMode)
+        // If the assistant didn't respond (null means all providers failed)...
+        if (result == null) {
+            // ...show an error so the caller's "?: return" bails out with the UI updated.
+            assistantState = "Assistant did not respond. Check network or start Ollama."
+        }
+        return result
+    }
+    // End of thinkAboutCommand().
+
+    // ── Step 5: speak the assistant's response aloud ─────────────
+    // Saves the response text to state (so Compose redraws the screen with it) and hands the
+    // text to the Text-to-Speech engine so it's read aloud through the phone's speaker.
+    private fun speakResponse(result: ClaudeResult) {
+        // Save the spoken text to lastResponse so it appears on screen.
+        lastResponse = result.spokenText
+        // Use TTS to speak the text aloud. QUEUE_FLUSH means stop any current speech and start this one.
+        tts?.speak(result.spokenText, TextToSpeech.QUEUE_FLUSH, null, null)
+    }
+    // End of speakResponse().
+
+    // ── Step 6: execute any actions the assistant requested ──────
+    // Loops through every Action the assistant asked for (there may be zero) and routes each
+    // one to ActionRouter, updating the on-screen "last action" label as it goes.
+    private fun executeActions(actions: List<Action>) {
+        // Loop through each action in the list and execute them one by one.
+        for (action in actions) {
+            // Update the UI to show which action is being executed right now.
+            lastAction = "Executing: ${action.type}"
+            // Call ActionRouter.execute() to perform the action (open app, search web, etc.).
+            // BUG FIX: "this" (the MainActivity itself, which IS a Context) must be passed
+            // here. ActionRouter.execute()'s context parameter defaults to null when omitted,
+            // and every branch inside ActionRouter only acts via a null-safe "context?.startActivity(...)"
+            // call — so without passing "this", every single action (open_app, search_web,
+            // send_sms, make_call) was silently doing NOTHING: the null-safe call short-circuits
+            // and startActivity is never actually invoked. Passing "this" gives ActionRouter a
+            // real Context so it can actually launch the browser, dialer, SMS app, etc.
+            ActionRouter.execute(action, this)
+        }
+        // End of action loop. If actions was empty, this loop simply does nothing.
+    }
+    // End of executeActions().
 
     // ── Play the Star Trek chime ─────────────────────────────────
     // On Android, we use the device's media player. The chime is

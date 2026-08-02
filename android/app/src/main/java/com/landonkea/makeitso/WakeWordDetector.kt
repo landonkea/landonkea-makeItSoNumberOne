@@ -45,6 +45,13 @@ import kotlinx.coroutines.withContext
 // isActive lets us check whether the coroutine has been cancelled
 // (e.g. the activity was destroyed) so we can stop reading the mic.
 import kotlinx.coroutines.isActive
+// currentCoroutineContext() lets a plain suspend function (one that isn't itself given a
+// CoroutineScope receiver, like the "this" inside withContext's lambda) ask "what coroutine
+// am I running in right now?" so it can then check isActive on that context. We need this in
+// listenForWakeWord() below because that function is a plain "private suspend fun", not a
+// lambda passed to withContext/launch, so it has no CoroutineScope receiver of its own to read
+// isActive from directly.
+import kotlinx.coroutines.currentCoroutineContext
 
 // ── Picovoice Porcupine import ────────────────────────────────────
 // Porcupine is the on-device wake word detection engine.
@@ -147,66 +154,22 @@ class WakeWordDetector(
         // even if construction or reading throws partway through.
         var audioRecord: AudioRecord? = null
         try {
-            // Porcupine records at 16 kHz (sampleRate = 16000).
-            val sampleRate = engine.sampleRate
-            // Each audio frame is a fixed number of PCM samples.
-            val frameLength = engine.frameLength
-            // Buffer to hold one frame of 16-bit PCM audio samples.
-            val buffer = ShortArray(frameLength)
-
-            // Calculate the minimum buffer size Android's AudioRecord
-            // needs for stable capture at this sample rate/format.
-            val minBufferSize = AudioRecord.getMinBufferSize(
-                sampleRate,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT
-            )
-            // Use at least frameLength * 2 bytes (one frame of shorts)
-            // but honor the platform's minimum if it's larger.
-            val bufferSize = maxOf(frameLength * 2, minBufferSize)
-
-            // ── Create the AudioRecord instance ────────────────────
-            // This opens the device's microphone for raw PCM capture.
-            val record = AudioRecord(
-                // MIC is the built-in phone microphone.
-                MediaRecorder.AudioSource.MIC,
-                // Must match Porcupine's sample rate (16000 Hz).
-                sampleRate,
-                // Porcupine expects mono audio (single channel).
-                AudioFormat.CHANNEL_IN_MONO,
-                // Porcupine expects 16-bit signed little-endian PCM.
-                AudioFormat.ENCODING_PCM_16BIT,
-                // Total buffer size in bytes (2 bytes per sample).
-                bufferSize
-            )
+            // Build a microphone AudioRecord that's configured to match exactly what Porcupine
+            // expects (sample rate, mono channel, 16-bit PCM). Extracted into its own function
+            // because "configure and open the microphone" is a distinct job from "read frames
+            // and ask Porcupine about each one" below — keeping them separate makes each easier
+            // to reason about on its own.
+            val record = createAudioRecordFor(engine)
             audioRecord = record
 
             // ── Start capturing audio from the microphone ──────────
             record.startRecording()
 
-            // ── Read and process audio frames in a loop ────────────
-            // audioRecord.read() fills the buffer with PCM samples
-            // and returns the number of shorts read (or negative on
-            // error). We keep reading until Porcupine finds the
-            // wake word. `isActive` is also checked so that if the
-            // activity is destroyed (coroutine cancelled) while we're
-            // mid-read, we stop promptly instead of holding the mic
-            // open until a wake word or read error eventually occurs.
-            while (isActive && record.read(buffer, 0, buffer.size) >= 0) {
-                // Pass the audio frame to Porcupine. It returns the
-                // index of the detected keyword (0 for the first
-                // keyword in the set) or -1 if no keyword found.
-                val keywordIndex = engine.process(buffer)
-                // If keywordIndex >= 0, "Computer" was detected!
-                if (keywordIndex >= 0) {
-                    // Return true — wake word was spoken. The mic is
-                    // released in `finally` below either way.
-                    return@withContext true
-                }
-            }
-
-            // Loop exited without detection (cancelled or read error).
-            return@withContext false
+            // Read frames from the mic in a loop, handing each one to Porcupine, until either
+            // the wake word is heard or we're told to stop. This is a suspend function so it
+            // can check `isActive` (whether the surrounding coroutine was cancelled) between
+            // reads.
+            return@withContext listenForWakeWord(engine, record)
 
         } catch (e: Exception) {
             // Log the error to Logcat for debugging.
@@ -230,4 +193,77 @@ class WakeWordDetector(
             }
         }
     }
+    // End of detect().
+
+    // ── Build a microphone AudioRecord tuned for Porcupine ───────
+    // Porcupine is picky about its input format (a specific sample rate, mono channel, and
+    // 16-bit PCM encoding), so this function reads those requirements off the engine and opens
+    // an AudioRecord that matches exactly. It does NOT start recording — that's the caller's
+    // job, since "build the recorder" and "use the recorder" are different responsibilities.
+    private fun createAudioRecordFor(engine: Porcupine): AudioRecord {
+        // Porcupine records at 16 kHz (sampleRate = 16000).
+        val sampleRate = engine.sampleRate
+
+        // Calculate the minimum buffer size Android's AudioRecord
+        // needs for stable capture at this sample rate/format.
+        val minBufferSize = AudioRecord.getMinBufferSize(
+            sampleRate,
+            AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT
+        )
+        // Use at least frameLength * 2 bytes (one frame of shorts, 2 bytes each)
+        // but honor the platform's minimum if it's larger.
+        val bufferSize = maxOf(engine.frameLength * 2, minBufferSize)
+
+        // ── Create the AudioRecord instance ────────────────────
+        // This opens the device's microphone for raw PCM capture.
+        return AudioRecord(
+            // MIC is the built-in phone microphone.
+            MediaRecorder.AudioSource.MIC,
+            // Must match Porcupine's sample rate (16000 Hz).
+            sampleRate,
+            // Porcupine expects mono audio (single channel).
+            AudioFormat.CHANNEL_IN_MONO,
+            // Porcupine expects 16-bit signed little-endian PCM.
+            AudioFormat.ENCODING_PCM_16BIT,
+            // Total buffer size in bytes (2 bytes per sample).
+            bufferSize
+        )
+    }
+    // End of createAudioRecordFor().
+
+    // ── Read mic frames and ask Porcupine about each one ─────────
+    // Loops, reading one frame of audio at a time from an already-recording AudioRecord, and
+    // passing each frame to Porcupine to check for the wake word. Returns true as soon as the
+    // wake word is heard, or false if the loop ends without detection (coroutine cancelled, or
+    // a read error). This is a suspend function purely so it can check `isActive`.
+    private suspend fun listenForWakeWord(engine: Porcupine, record: AudioRecord): Boolean {
+        // Buffer to hold one frame of 16-bit PCM audio samples. Reused for every read so we're
+        // not allocating a new array on every loop iteration.
+        val buffer = ShortArray(engine.frameLength)
+
+        // audioRecord.read() fills the buffer with PCM samples
+        // and returns the number of shorts read (or negative on
+        // error). We keep reading until Porcupine finds the
+        // wake word. `isActive` is also checked so that if the
+        // activity is destroyed (coroutine cancelled) while we're
+        // mid-read, we stop promptly instead of holding the mic
+        // open until a wake word or read error eventually occurs.
+        while (currentCoroutineContext().isActive && record.read(buffer, 0, buffer.size) >= 0) {
+            // Pass the audio frame to Porcupine. It returns the
+            // index of the detected keyword (0 for the first
+            // keyword in the set) or -1 if no keyword found.
+            val keywordIndex = engine.process(buffer)
+            // If keywordIndex >= 0, "Computer" was detected!
+            if (keywordIndex >= 0) {
+                // Return true — wake word was spoken. The caller's `finally` block still
+                // releases the mic either way.
+                return true
+            }
+        }
+
+        // Loop exited without detection (cancelled or read error).
+        return false
+    }
+    // End of listenForWakeWord().
 }
