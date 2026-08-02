@@ -104,12 +104,31 @@ def execute_action(action_dict, config):
     # Otherwise, check if the action is "run_command" (run terminal).
     elif action_type == "run_command":
         # Call the run_command function with the command string.
-        return actions.system.run_command(params.get("command", ""))
+        # `config` is also passed through here (unlike the other
+        # handlers above) because run_command reads its
+        # `security.allowed_commands` / `security.
+        # command_confirmation_required` settings from it — see
+        # actions/system.py's SECURITY section for why.
+        return actions.system.run_command(params.get("command", ""), config)
 
     # Otherwise, check if the action is "read_file" (read a file).
     elif action_type == "read_file":
-        # Call the read_file function with the file path.
-        return actions.system.read_file(params.get("path", ""))
+        # Call the read_file function with the file path. `config` is
+        # passed through so read_file can check the path against its
+        # `security.denied_read_paths` denylist — see actions/
+        # system.py's SECURITY section for why.
+        return actions.system.read_file(params.get("path", ""), config)
+
+    # Otherwise, check if the action is "confirm_command" (the user
+    # said "confirm" to approve a run_command that was held back
+    # pending confirmation — see actions/system.py's SECURITY
+    # section). This action takes no params: it only ever executes
+    # whatever command is already sitting in the pending-confirmation
+    # slot, never a fresh command text from this action's params, so
+    # a compromised/injected response can't swap in a different
+    # command at confirmation time.
+    elif action_type == "confirm_command":
+        return actions.system.confirm_pending_command()
 
     # Otherwise, check if the action is "scroll" (scroll up/down).
     elif action_type == "scroll":

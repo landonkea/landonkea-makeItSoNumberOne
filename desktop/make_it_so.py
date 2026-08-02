@@ -219,7 +219,8 @@ def run_one_conversation_cycle(config, conversation_history):
     _record_exchange(conversation_history, user_text, spoken_text)
 
     _speak_reply(spoken_text)
-    _run_actions(actions, config)
+    action_results = _run_actions(actions, config)
+    _handle_action_results(action_results, conversation_history)
 
     return True
 
@@ -327,13 +328,72 @@ def _speak_reply(spoken_text):
 
 
 def _run_actions(actions, config):
-    """Execute any actions the AI returned (open apps, search, etc.)."""
-    if actions:
-        # Import the `action_router` module from `core`. This module
-        # decides WHICH action handler to call based on the action
-        # name.
-        from core import action_router
-        action_router.execute_actions(actions, config)
+    """
+    Execute any actions the AI returned (open apps, search, etc.).
+
+    RETURNS
+    -------
+    list of str
+        One result message per action that ran, e.g. "Opened Safari"
+        or (for a run_command that isn't allowlisted — see
+        core/actions/system.py's SECURITY section) a "CONFIRMATION
+        REQUIRED: ..." message. Empty list if there were no actions.
+    """
+    if not actions:
+        return []
+    # Import the `action_router` module from `core`. This module
+    # decides WHICH action handler to call based on the action
+    # name.
+    from core import action_router
+    return action_router.execute_actions(actions, config)
+
+
+def _handle_action_results(action_results, conversation_history):
+    """
+    Make sure the user and the AI both actually find out about
+    anything an action reported back.
+
+    WHY THIS EXISTS
+    ----------------
+    Action results (open_app's "Opened Safari", run_command's
+    output, etc.) were previously only ever printed to the terminal
+    for debugging — never spoken aloud, never added to
+    conversation_history. That's fine for a simple "Opened Safari"
+    confirmation, but it silently broke the run_command confirmation
+    gate (see core/actions/system.py): if a command needs
+    confirmation, the assistant MUST actually tell the user what
+    it's about to run (spoken, not just printed to a terminal
+    they're probably not looking at), and the AI needs that fact in
+    its own conversation history so that when the user next says
+    "Computer, confirm," it recognizes what's being confirmed and
+    responds with the confirm_command action instead of guessing.
+    This function fixes both gaps, deliberately kept narrow (it only
+    speaks CONFIRMATION REQUIRED messages aloud, not every action's
+    result, so a routine "Opened Safari" doesn't get read out loud
+    on top of Claude's own spoken reply).
+    """
+    if not action_results:
+        return
+
+    from core import tts
+
+    for result in action_results:
+        if not result or result == "(no result)":
+            continue
+        # Record every action result so the AI has it as context on
+        # the NEXT turn — most importantly so a pending
+        # "CONFIRMATION REQUIRED: <command>" message is something
+        # the AI can see and correctly react to when the user says
+        # "confirm."
+        conversation_history.append({
+            "role": "assistant",
+            "content": f"ACTION_RESULT: {result}"
+        })
+        # A pending confirmation is the one kind of action result the
+        # user MUST hear — otherwise they'd have no way to know the
+        # assistant is waiting on them before it runs a command.
+        if result.startswith("CONFIRMATION REQUIRED"):
+            tts.speak(result)
 
 
 # Define a function that loads configuration from a YAML file.
