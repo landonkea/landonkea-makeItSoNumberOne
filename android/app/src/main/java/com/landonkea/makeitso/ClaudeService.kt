@@ -29,6 +29,8 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 // Request represents a single HTTP request (URL, headers, body — everything needed to call an API).
 import okhttp3.Request
+// Response represents the HTTP response that comes back from a server after a Request is sent.
+import okhttp3.Response
 // toRequestBody() wraps a string as the body of an HTTP request so it can be sent over the network.
 import okhttp3.RequestBody.Companion.toRequestBody
 // JSONArray builds ordered lists in JSON format, like ["apple", "banana"].
@@ -190,41 +192,25 @@ object ClaudeService {
                     // build() creates the final Request object from all the configuration above.
                     .build()
 
-                // ── Execute the request ─────────────────────────
+                // ── Execute the request and parse the response ──
                 // client.newCall(request).execute() actually sends the HTTP request and blocks until we get a response.
                 val response = client.newCall(request).execute()
-                // Check if the server returned a success status code (200–299 range).
-                if (!response.isSuccessful) {
-                    // If the request failed (e.g., 400 Bad Request or 500 Server Error), close
-                    // the response body before returning — otherwise this leaks the underlying
-                    // connection/stream since nothing else ever reads or closes it.
-                    response.close()
-                    return@withContext null
+                // buildResultFromResponse() does all the shared work of checking success, reading
+                // the body, and parsing it into a ClaudeResult — see its comment below for why
+                // this logic is shared between the Claude and Ollama providers instead of
+                // duplicated. We only need to tell it HOW to pull the raw generated text out of
+                // Claude's specific JSON shape, via this lambda (an inline, unnamed function).
+                return@withContext buildResultFromResponse(response) { json ->
+                    // Get the "content" array from Claude's response. Content holds one or more text blocks.
+                    val content = json.getJSONArray("content")
+                    // If content is empty, Claude didn't return any text — nothing to process, signal null.
+                    if (content.length() == 0) {
+                        null
+                    } else {
+                        // Get the first (and usually only) text block, and its "text" field.
+                        content.getJSONObject(0).getString("text")
+                    }
                 }
-
-                // Extract the response body as a string. The "?:" elvis operator returns null if body is null.
-                val body = response.body?.string() ?: return@withContext null
-                // Parse the JSON string into a JSONObject so we can access its fields programmatically.
-                val json = JSONObject(body)
-
-                // ── Parse the response ─────────────────────────
-                // Get the "content" array from Claude's response. Content holds one or more text blocks.
-                val content = json.getJSONArray("content")
-                // If content is empty, Claude didn't return any text — nothing to process, return null.
-                if (content.length() == 0) return@withContext null
-
-                // Get the first (and usually only) text block from the content array.
-                val textBlock = content.getJSONObject(0)
-                // Extract the actual text string from the "text" field of the text block.
-                val fullText = textBlock.getString("text")
-
-                // Parse the structured text to find what the assistant wants to SAY (the spoken response part).
-                val spokenText = extractSpokenText(fullText)
-                // Parse the structured text to find what the assistant wants us to DO (the action commands).
-                val actions = extractActions(fullText)
-
-                // Return both the spoken text and the parsed actions packaged together in a ClaudeResult.
-                return@withContext ClaudeResult(spokenText, actions)
 
             } catch (e: Exception) {
                 // If ANY error happened above (network failure, bad JSON, timeout, etc.), catch it here.
@@ -298,35 +284,17 @@ object ClaudeService {
                     // build() creates the final Request object from all the configuration above.
                     .build()
 
-                // ── Execute the request ─────────────────────────
+                // ── Execute the request and parse the response ──
                 // client.newCall(request).execute() sends the HTTP request and blocks until we get a response.
                 val response = client.newCall(request).execute()
-                // Check if the server returned a success status code (200–299 range).
-                if (!response.isSuccessful) {
-                    // If the request failed (e.g., Ollama isn't running or model not found), close
-                    // the response body before returning — otherwise this leaks the underlying
-                    // connection/stream since nothing else ever reads or closes it.
-                    response.close()
-                    return@withContext null
-                }
-
-                // Extract the response body as a string. The "?:" elvis operator returns null if body is null.
-                val body = response.body?.string() ?: return@withContext null
-                // Parse the JSON string into a JSONObject so we can access its fields programmatically.
-                val json = JSONObject(body)
-
-                // ── Parse the Ollama response ──────────────────
-                // Ollama's /api/generate returns a JSON object with a "response" field.
-                // The "response" field contains the full text generated by the model.
-                val fullText = json.getString("response")
-
-                // Parse the structured text to find what the assistant wants to SAY (the spoken response part).
-                val spokenText = extractSpokenText(fullText)
-                // Parse the structured text to find what the assistant wants us to DO (the action commands).
-                val actions = extractActions(fullText)
-
-                // Return both the spoken text and the parsed actions packaged together in a ClaudeResult.
-                return@withContext ClaudeResult(spokenText, actions)
+                // buildResultFromResponse() (shared with processWithClaude() above) handles checking
+                // success, reading the body, and building the final ClaudeResult. We only supply the
+                // Ollama-specific detail: Ollama's /api/generate returns a JSON object with a
+                // "response" field containing the full text generated by the model — a different
+                // shape from Claude's "content" array, which is why this lambda differs from the one
+                // in processWithClaude() even though everything else about handling the response is
+                // identical.
+                return@withContext buildResultFromResponse(response) { json -> json.getString("response") }
 
             } catch (e: Exception) {
                 // If ANY error happened above (connection refused, timeout, bad JSON, etc.), catch it here.
@@ -339,6 +307,46 @@ object ClaudeService {
         // End of withContext(Dispatchers.IO).
     }
     // End of processWithOllama() — the offline provider.
+
+    // ── Shared response handling for both providers ─────────────
+    // Both processWithClaude() and processWithOllama() need to do the exact same three things
+    // once they have an HTTP response in hand: (1) make sure the server said "success", closing
+    // the response if not (to avoid leaking the underlying network connection — see the comment
+    // at the call sites), (2) read and JSON-parse the response body, and (3) pull the assistant's
+    // raw generated text out of that JSON and split it into spoken text + actions. The ONLY thing
+    // that differs between the two providers is WHERE in the JSON that raw text lives — Claude
+    // nests it inside a "content" array, Ollama puts it directly in a "response" field. Rather than
+    // duplicate steps 1–3 in both functions, this shared helper takes a lambda ("extractFullText")
+    // that knows how to pull the text out of that provider's specific JSON shape, and does
+    // everything else itself.
+    private fun buildResultFromResponse(
+        response: Response,
+        extractFullText: (JSONObject) -> String?
+    ): ClaudeResult? {
+        // Check if the server returned a success status code (200–299 range).
+        if (!response.isSuccessful) {
+            // If the request failed (e.g., 400 Bad Request, 500 Server Error, Ollama not running),
+            // close the response body before returning — otherwise this leaks the underlying
+            // connection/stream since nothing else ever reads or closes it.
+            response.close()
+            return null
+        }
+        // Extract the response body as a string. The "?:" elvis operator returns null if body is null.
+        val body = response.body?.string() ?: return null
+        // Parse the JSON string into a JSONObject so we can access its fields programmatically.
+        val json = JSONObject(body)
+        // Ask the caller-supplied lambda to pull the raw generated text out of this provider's
+        // JSON shape. It returns null if there was no usable text (e.g. Claude's content array
+        // was empty), in which case we bail out early just like the original code did.
+        val fullText = extractFullText(json) ?: return null
+        // Parse the structured text to find what the assistant wants to SAY (the spoken response part).
+        val spokenText = extractSpokenText(fullText)
+        // Parse the structured text to find what the assistant wants us to DO (the action commands).
+        val actions = extractActions(fullText)
+        // Return both the spoken text and the parsed actions packaged together in a ClaudeResult.
+        return ClaudeResult(spokenText, actions)
+    }
+    // End of buildResultFromResponse().
 
     // ── Extract the spoken response from the assistant's format ─
     // This function searches for "RESPONSE:" in the output and grabs whatever text follows it.
@@ -359,6 +367,9 @@ object ClaudeService {
     // ── Extract actions from the assistant's format ─────────────
     // This function looks for "ACTIONS:" in the response and parses each "- action:" block.
     // It works identically whether the text came from Claude or Ollama (same prompt → same format).
+    // Its ONLY job is: find the ACTIONS section, split it into per-action chunks of text ("blocks"),
+    // and hand each block to parseActionBlock() to turn into an Action object. The actual line-by-line
+    // parsing logic lives in parseActionBlock so this function stays focused on the splitting step.
     private fun extractActions(fullText: String): List<Action> {
         // Create an empty mutable list that we'll fill with Action objects as we parse them.
         val actions = mutableListOf<Action>()
@@ -374,38 +385,9 @@ object ClaudeService {
             // Split the actions text into individual action blocks by looking for lines starting with "- action:".
             val blocks = actionsText.split("\n\\s*-\\s+action:".toRegex())
             // Loop through each block, skipping the first one (which is text before any "- action:").
-            for (block in blocks.drop(1)) {
-                // Split the current action block into separate lines for parsing.
-                val lines = block.trim().split("\n")
-                // The first line of the block is the action type string. If it's null, skip this block.
-                val actionType = lines.firstOrNull()?.trim() ?: continue
-
-                // Create an empty map to hold the action's parameters (key-value pairs like query=cats).
-                val params = mutableMapOf<String, String>()
-                // Boolean flag to track whether we've entered the "params:" section of this block.
-                var inParams = false
-                // Loop through all lines after the first one (the action type line).
-                for (line in lines.drop(1)) {
-                    // Remove leading/trailing whitespace from the current line.
-                    val trimmed = line.trim()
-                    // If the line is exactly "params:", switch into parameter-parsing mode.
-                    if (trimmed == "params:") {
-                        inParams = true
-                    // If we're inside params and the line has a colon, it's a key: value pair.
-                    } else if (inParams && trimmed.contains(":")) {
-                        // Split the line at the first colon into exactly two parts (key and value).
-                        val parts = trimmed.split(":", limit = 2)
-                        // Store the key-value pair in the params map (trimming whitespace from both).
-                        params[parts[0].trim()] = parts[1].trim()
-                    }
-                    // If we're not in params or the line has no colon, we ignore it.
-                }
-                // End of parameter-parsing loop.
-
-                // Create a new Action object from the parsed type and params, and add it to our list.
-                actions.add(Action(actionType, params))
-            }
-            // End of block-processing loop.
+            // mapNotNull runs parseActionBlock on every block and keeps only the non-null results,
+            // so a malformed block (no action type) is silently dropped instead of crashing.
+            actions.addAll(blocks.drop(1).mapNotNull { block -> parseActionBlock(block) })
         }
         // If no match was found, actions list stays empty — the caller will handle that.
 
@@ -413,5 +395,55 @@ object ClaudeService {
         return actions
     }
     // End of extractActions().
+
+    // ── Parse one "- action:" block into an Action object ───────
+    // Takes the raw text of a single action block (everything between one "- action:" marker
+    // and the next) and turns it into an Action. Returns null if the block doesn't even have
+    // an action type line, so the caller can skip it.
+    private fun parseActionBlock(block: String): Action? {
+        // Split the current action block into separate lines for parsing.
+        val lines = block.trim().split("\n")
+        // The first line of the block is the action type string. If it's null, this block is empty — skip it.
+        val actionType = lines.firstOrNull()?.trim() ?: return null
+
+        // Delegate to a second helper that reads just the "params:" section into a map.
+        val params = parseActionParams(lines.drop(1))
+
+        // Create a new Action object from the parsed type and params.
+        return Action(actionType, params)
+    }
+    // End of parseActionBlock().
+
+    // ── Parse the "params:" section of an action block ──────────
+    // Takes the lines that follow the action-type line and pulls out any "key: value" pairs
+    // that appear after a line containing exactly "params:". Lines before "params:" (or without
+    // a colon) are ignored.
+    private fun parseActionParams(lines: List<String>): Map<String, String> {
+        // Create an empty map to hold the action's parameters (key-value pairs like query=cats).
+        val params = mutableMapOf<String, String>()
+        // Boolean flag to track whether we've entered the "params:" section of this block.
+        var inParams = false
+        // Loop through every line that could contain a parameter.
+        for (line in lines) {
+            // Remove leading/trailing whitespace from the current line.
+            val trimmed = line.trim()
+            // If the line is exactly "params:", switch into parameter-parsing mode.
+            if (trimmed == "params:") {
+                inParams = true
+            // If we're inside params and the line has a colon, it's a key: value pair.
+            } else if (inParams && trimmed.contains(":")) {
+                // Split the line at the first colon into exactly two parts (key and value).
+                val parts = trimmed.split(":", limit = 2)
+                // Store the key-value pair in the params map (trimming whitespace from both).
+                params[parts[0].trim()] = parts[1].trim()
+            }
+            // If we're not in params or the line has no colon, we ignore it.
+        }
+        // End of the parameter-parsing loop.
+
+        // Return whatever key-value pairs we found (may be empty if there was no params: section).
+        return params
+    }
+    // End of parseActionParams().
 }
 // End of ClaudeService object.

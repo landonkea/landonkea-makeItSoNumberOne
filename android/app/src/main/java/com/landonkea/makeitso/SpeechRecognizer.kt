@@ -72,27 +72,10 @@ object SpeechRecognizer {
         return withContext(Dispatchers.Main) {
             // Wrap everything in try-catch so errors (no speech recognizer, etc.) don't crash the app.
             try {
-                // ── Create the speech recognition intent ─────────
-                // Create an Intent that asks Android to start its built-in speech recognition service.
-                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-                // EXTRA_LANGUAGE_MODEL tells Android which speech model to use.
-                intent.putExtra(
-                    // LANGUAGE_MODEL_FREE_FORM is optimized for dictation and natural speech (not short commands).
-                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-                )
-                // EXTRA_LANGUAGE sets which language the speech recognizer should listen for.
-                intent.putExtra(
-                    // Locale.getDefault() returns the user's device language (e.g., en_US for US English).
-                    RecognizerIntent.EXTRA_LANGUAGE,
-                    Locale.getDefault()
-                )
-                // EXTRA_PROMPT sets the text that appears in Android's speech recognition dialog.
-                intent.putExtra(
-                    // This text tells the user what to say when the mic dialog appears.
-                    RecognizerIntent.EXTRA_PROMPT,
-                    "Say your command for the Computer..."
-                )
+                // Build the Intent that tells Android what kind of speech recognition to run.
+                // Extracted into its own function since "configure the recognition request" and
+                // "bridge the callback-based result to a coroutine" (below) are two separate jobs.
+                val intent = buildSpeechRecognitionIntent()
 
                 // ── Create a one-shot bridge to the coroutine ────
                 // CompletableDeferred is like a "promise" that can be
@@ -132,6 +115,36 @@ object SpeechRecognizer {
         // End of withContext(Dispatchers.Main) — execution continues on the original thread.
     }
     // End of recognize() function.
+
+    // ── Build the speech recognition Intent ──────────────────────
+    // This function's ONLY job is to construct and configure the Intent that requests speech
+    // recognition from Android — it does not start anything or wait for a result, which keeps
+    // it separate from the coroutine-bridging logic in recognize() above.
+    private fun buildSpeechRecognitionIntent(): Intent {
+        // Create an Intent that asks Android to start its built-in speech recognition service.
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+        // EXTRA_LANGUAGE_MODEL tells Android which speech model to use.
+        intent.putExtra(
+            // LANGUAGE_MODEL_FREE_FORM is optimized for dictation and natural speech (not short commands).
+            RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+            RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+        )
+        // EXTRA_LANGUAGE sets which language the speech recognizer should listen for.
+        intent.putExtra(
+            // Locale.getDefault() returns the user's device language (e.g., en_US for US English).
+            RecognizerIntent.EXTRA_LANGUAGE,
+            Locale.getDefault()
+        )
+        // EXTRA_PROMPT sets the text that appears in Android's speech recognition dialog.
+        intent.putExtra(
+            // This text tells the user what to say when the mic dialog appears.
+            RecognizerIntent.EXTRA_PROMPT,
+            "Say your command for the Computer..."
+        )
+        // Return the fully configured intent, ready to be passed to startActivityForResult().
+        return intent
+    }
+    // End of buildSpeechRecognitionIntent().
 
     // ── Handle the activity result ───────────────────────────────
     // This function should be called from the Activity's onActivityResult():
