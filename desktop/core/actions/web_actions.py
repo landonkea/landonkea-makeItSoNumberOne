@@ -75,121 +75,16 @@ def search_web(query, config):
         # instead of crashing the app at startup. See NOTE above.
         import requests
 
-        # ── DuckDuckGo Instant Answer API ────────────────────────
-        # This API doesn't need any authentication — it's free and
-        # open. Just send a GET request with the query.
-        # Define the API endpoint URL. An "endpoint" is like a specific
-        # phone number at a company that handles a specific type of request.
-        url = "https://api.duckduckgo.com/"
-        # Define the query parameters (like adding ?q=weather to a URL).
-        # Parameters are key-value pairs that customize the request.
-        params = {
-            # "q" is the search query itself (what we're searching for).
-            "q": query,
-            # "format" tells DuckDuckGo to return JSON (structured data),
-            # not HTML (web page code). JSON is easier for Python to read.
-            "format": "json",
-            # "no_html" tells DuckDuckGo to remove HTML tags from results,
-            # giving us clean text without markup code.
-            "no_html": 1,
-            # "skip_disambig" tells DuckDuckGo to skip disambiguation
-            # pages (like Wikipedia's "did you mean X or Y?" pages).
-            "skip_disambig": 1
-        }
+        data = _fetch_duckduckgo_results(requests, query)
+        if isinstance(data, str):
+            # `_fetch_duckduckgo_results` returns a string instead of
+            # parsed JSON when the HTTP request itself didn't succeed
+            # (e.g. "Search failed (HTTP 502)"). Pass that message
+            # straight back to the caller instead of trying to format
+            # results out of it.
+            return data
 
-        # Send the GET request to DuckDuckGo's API.
-        # `requests.get()` is like typing a URL into a browser and pressing
-        # Enter — it fetches the data from the server.
-        # The `params` dictionary gets converted into URL parameters.
-        # `timeout=15` means "wait up to 15 seconds, then give up" —
-        # this prevents the program from hanging forever on a slow network.
-        response = requests.get(
-            url,
-            params=params,
-            timeout=15
-        )
-
-        # Check if the HTTP status code is NOT 200 (success).
-        # HTTP status codes: 200 = OK, 404 = Not Found, 500 = Server Error.
-        # If DuckDuckGo didn't return a success code, something went wrong.
-        if response.status_code != 200:
-            # Return an error message that includes the status code so we
-            # know what type of error occurred (e.g., 502 = bad gateway).
-            return f"Search failed (HTTP {response.status_code})"
-
-        # Parse the JSON response from DuckDuckGo into a Python dictionary.
-        # `response.json()` converts the JSON text into nested Python data
-        # structures (dictionaries within dictionaries).
-        data = response.json()
-
-        # ── Format the results ───────────────────────────────────
-        # Start with an empty string that we'll build up with formatted
-        # results. We'll keep appending text to this string as we process
-        # different parts of the response.
-        results_text = ""
-
-        # Abstract: DuckDuckGo's summary of the topic (like a
-        # mini-Wikipedia article). This is the main knowledge panel
-        # that appears at the top of DuckDuckGo search results.
-        # `data.get("Abstract", "")` gets the "Abstract" field from the
-        # response, or returns "" if the field is missing.
-        abstract = data.get("Abstract", "")
-        # If there's an abstract (non-empty string)...
-        if abstract:
-            # Add the summary to our results text with a label.
-            # We use += to append new text to the existing string.
-            results_text += f"Summary: {abstract}\n\n"
-
-        # Source URL for the abstract (where the summary came from).
-        source = data.get("AbstractURL", "")
-        # If there's a source URL...
-        if source:
-            # Add the source URL to the results text with a label.
-            # The user can visit this URL for more information.
-            results_text += f"Source: {source}\n\n"
-
-        # Related topics: list of search results (titles and URLs).
-        # `data.get("RelatedTopics", [])` gets the list of results or
-        # an empty list if there are none.
-        related = data.get("RelatedTopics", [])
-        # If there are related topics (non-empty list)...
-        if related:
-            # Add a "Results:" header to the output text.
-            results_text += "Results:\n"
-            # Loop through the first 5 results (or fewer if there aren't 5).
-            # `enumerate(related[:5])` gives us both the index (i, starting
-            # at 0) and the topic item. `[:5]` is a slice that takes the
-            # first 5 items from the list.
-            for i, topic in enumerate(related[:5]):  # Top 5 results.
-                # DuckDuckGo sometimes groups results into categories.
-                # Check if this topic has sub-topics (a "Topics" field).
-                if "Topics" in topic:
-                    # It's a category with nested topics inside it.
-                    # Loop through up to 3 sub-topics within the category.
-                    # `topic["Topics"][:3]` takes the first 3 sub-topics.
-                    for sub_topic in topic["Topics"][:3]:
-                        # Get the title/text of the sub-topic.
-                        title = sub_topic.get("Text", "")
-                        # Get the URL of the sub-topic.
-                        url_sub = sub_topic.get("FirstURL", "")
-                        # If there's a title (non-empty)...
-                        if title:
-                            # Add the result number, title, and URL to the
-                            # output text with indentation for readability.
-                            results_text += f"  {i+1}. {title}\n"
-                            results_text += f"     {url_sub}\n"
-                else:
-                    # It's a regular result (not a category).
-                    # Get the title/text of the result.
-                    title = topic.get("Text", "")
-                    # Get the URL of the result.
-                    url_sub = topic.get("FirstURL", "")
-                    # If there's a title...
-                    if title:
-                        # Add the result number, title, and URL to the
-                        # output text with proper formatting.
-                        results_text += f"  {i+1}. {title}\n"
-                        results_text += f"     {url_sub}\n"
+        results_text = _format_search_results(data)
 
         # If we never added anything to results_text (no abstract, no
         # sources, no related topics), the search returned nothing.
@@ -218,3 +113,195 @@ def search_web(query, config):
     # failure, etc.) and return the error message as a string.
     except Exception as e:
         return f"Search error: {e}"
+
+
+# Define a helper function that sends the actual HTTP request to
+# DuckDuckGo and hands back the parsed JSON. Pulling this out of
+# search_web() means that function does ONE job (build the final
+# text answer) while this one does a different job (talk to the
+# network) — each is easier to read and test on its own.
+def _fetch_duckduckgo_results(requests, query):
+    """
+    Send the search request to DuckDuckGo's Instant Answer API.
+
+    PARAMETERS
+    ----------
+    requests : module
+        The already-imported `requests` library, passed in from
+        search_web() rather than imported again here.
+    query : str
+        The user's search phrase.
+
+    RETURNS
+    -------
+    dict or str
+        A dict of parsed JSON on success, or an error message string
+        if the HTTP request came back with a non-200 status code.
+    """
+    # ── DuckDuckGo Instant Answer API ────────────────────────
+    # This API doesn't need any authentication — it's free and
+    # open. Just send a GET request with the query.
+    # Define the API endpoint URL. An "endpoint" is like a specific
+    # phone number at a company that handles a specific type of request.
+    url = "https://api.duckduckgo.com/"
+    # Define the query parameters (like adding ?q=weather to a URL).
+    # Parameters are key-value pairs that customize the request.
+    params = {
+        # "q" is the search query itself (what we're searching for).
+        "q": query,
+        # "format" tells DuckDuckGo to return JSON (structured data),
+        # not HTML (web page code). JSON is easier for Python to read.
+        "format": "json",
+        # "no_html" tells DuckDuckGo to remove HTML tags from results,
+        # giving us clean text without markup code.
+        "no_html": 1,
+        # "skip_disambig" tells DuckDuckGo to skip disambiguation
+        # pages (like Wikipedia's "did you mean X or Y?" pages).
+        "skip_disambig": 1
+    }
+
+    # Send the GET request to DuckDuckGo's API.
+    # `requests.get()` is like typing a URL into a browser and pressing
+    # Enter — it fetches the data from the server.
+    # The `params` dictionary gets converted into URL parameters.
+    # `timeout=15` means "wait up to 15 seconds, then give up" —
+    # this prevents the program from hanging forever on a slow network.
+    response = requests.get(
+        url,
+        params=params,
+        timeout=15
+    )
+
+    # Check if the HTTP status code is NOT 200 (success).
+    # HTTP status codes: 200 = OK, 404 = Not Found, 500 = Server Error.
+    # If DuckDuckGo didn't return a success code, something went wrong.
+    if response.status_code != 200:
+        # Return an error message that includes the status code so we
+        # know what type of error occurred (e.g., 502 = bad gateway).
+        return f"Search failed (HTTP {response.status_code})"
+
+    # Parse the JSON response from DuckDuckGo into a Python dictionary.
+    # `response.json()` converts the JSON text into nested Python data
+    # structures (dictionaries within dictionaries).
+    return response.json()
+
+
+# Define a helper function that turns DuckDuckGo's raw JSON data into
+# the human-readable text block the user will hear/read. Splitting
+# this out of search_web() means the "how do I talk to the network"
+# logic and the "how do I format an answer" logic don't live in the
+# same block of code — each piece has exactly one job.
+def _format_search_results(data):
+    """
+    Build a readable text summary from DuckDuckGo's parsed JSON.
+
+    PARAMETERS
+    ----------
+    data : dict
+        Parsed JSON from the DuckDuckGo Instant Answer API.
+
+    RETURNS
+    -------
+    str
+        Formatted text with the summary, source, and top results.
+        Empty string if the API returned no usable content.
+    """
+    # ── Format the results ───────────────────────────────────
+    # Start with an empty string that we'll build up with formatted
+    # results. We'll keep appending text to this string as we process
+    # different parts of the response.
+    results_text = ""
+
+    # Abstract: DuckDuckGo's summary of the topic (like a
+    # mini-Wikipedia article). This is the main knowledge panel
+    # that appears at the top of DuckDuckGo search results.
+    # `data.get("Abstract", "")` gets the "Abstract" field from the
+    # response, or returns "" if the field is missing.
+    abstract = data.get("Abstract", "")
+    # If there's an abstract (non-empty string)...
+    if abstract:
+        # Add the summary to our results text with a label.
+        # We use += to append new text to the existing string.
+        results_text += f"Summary: {abstract}\n\n"
+
+    # Source URL for the abstract (where the summary came from).
+    source = data.get("AbstractURL", "")
+    # If there's a source URL...
+    if source:
+        # Add the source URL to the results text with a label.
+        # The user can visit this URL for more information.
+        results_text += f"Source: {source}\n\n"
+
+    # Related topics: list of search results (titles and URLs).
+    # `data.get("RelatedTopics", [])` gets the list of results or
+    # an empty list if there are none.
+    related = data.get("RelatedTopics", [])
+    # If there are related topics (non-empty list)...
+    if related:
+        # Add a "Results:" header to the output text.
+        results_text += "Results:\n"
+        # Loop through the first 5 results (or fewer if there aren't 5).
+        # `enumerate(related[:5])` gives us both the index (i, starting
+        # at 0) and the topic item. `[:5]` is a slice that takes the
+        # first 5 items from the list.
+        for i, topic in enumerate(related[:5]):  # Top 5 results.
+            results_text += _format_one_topic(i, topic)
+
+    return results_text
+
+
+# Define a helper that formats a SINGLE DuckDuckGo "related topic"
+# entry into one or more numbered result lines. This is the smallest
+# unit of work inside the formatting loop, so it gets its own
+# single-purpose function rather than being nested inline.
+def _format_one_topic(index, topic):
+    """
+    Format one related-topic entry from DuckDuckGo as numbered lines.
+
+    PARAMETERS
+    ----------
+    index : int
+        Zero-based position of this topic in the results list, used
+        to number the output starting at 1.
+    topic : dict
+        One entry from DuckDuckGo's "RelatedTopics" list. It's either
+        a plain result (has "Text"/"FirstURL") or a category that
+        groups several sub-results under a "Topics" list.
+
+    RETURNS
+    -------
+    str
+        One or more "  N. Title\\n     URL\\n" lines, or an empty
+        string if the topic had no title to show.
+    """
+    text = ""
+    # DuckDuckGo sometimes groups results into categories.
+    # Check if this topic has sub-topics (a "Topics" field).
+    if "Topics" in topic:
+        # It's a category with nested topics inside it.
+        # Loop through up to 3 sub-topics within the category.
+        # `topic["Topics"][:3]` takes the first 3 sub-topics.
+        for sub_topic in topic["Topics"][:3]:
+            # Get the title/text of the sub-topic.
+            title = sub_topic.get("Text", "")
+            # Get the URL of the sub-topic.
+            url_sub = sub_topic.get("FirstURL", "")
+            # If there's a title (non-empty)...
+            if title:
+                # Add the result number, title, and URL to the
+                # output text with indentation for readability.
+                text += f"  {index + 1}. {title}\n"
+                text += f"     {url_sub}\n"
+    else:
+        # It's a regular result (not a category).
+        # Get the title/text of the result.
+        title = topic.get("Text", "")
+        # Get the URL of the result.
+        url_sub = topic.get("FirstURL", "")
+        # If there's a title...
+        if title:
+            # Add the result number, title, and URL to the
+            # output text with proper formatting.
+            text += f"  {index + 1}. {title}\n"
+            text += f"     {url_sub}\n"
+    return text

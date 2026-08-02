@@ -53,116 +53,34 @@ def wait_for_wake_word(config):
     This function blocks (keeps running) until:
     1. The wake word "Computer" is detected, OR
     2. The user presses Ctrl+C to quit.
+
+    It's broken into smaller helper functions below — one to check
+    the required libraries are installed, one to read/validate the
+    AccessKey, one to start up Porcupine + the microphone, and one
+    to run the actual listen loop — so each step can be understood
+    (and tested) on its own.
     """
-    # ── Try to import Porcupine ───────────────────────────────
-    # If the user hasn't installed it yet, show a helpful message.
-    # "try" means: attempt this code, and if it fails, catch the
-    # error in "except" instead of crashing the program.
-    try:
-        # Try to import the pvporcupine library (a wake word
-        # detection engine made by Picovoice). If this library
-        # isn't installed, Python will raise an ImportError.
-        import pvporcupine
-    # If the import failed (library not installed), run this block
-    # instead of letting the program crash.
-    except ImportError:
-        # Print a blank line for spacing in the terminal.
-        print()
-        # Print a fancy box that tells the user Porcupine is missing.
-        print("  ╔══════════════════════════════════════════════════╗")
-        print("  ║  Porcupine wake word engine not installed.      ║")
-        print("  ║                                                ║")
-        # Tell them the exact pip command to install it.
-        print("  ║  Run:  pip install pvporcupine                  ║")
-        print("  ║                                                ║")
-        # Tell them they also need a free API key from Picovoice.
-        print("  ║  Then get a FREE AccessKey at:                  ║")
-        print("  ║  https://console.picovoice.ai/                   ║")
-        print("  ╚══════════════════════════════════════════════════╝")
-        # Print another blank line at the bottom of the box.
-        print()
-        # Return False to tell the caller that wake word detection
-        # could not start (because Porcupine is missing).
+    # ── Step 1: make sure both required libraries are installed ──
+    pvporcupine = _import_pvporcupine()
+    if pvporcupine is None:
+        return False
+    pyaudio = _import_pyaudio()
+    if pyaudio is None:
         return False
 
-    # Another try block to handle a missing PyAudio library.
-    try:
-        # Try to import pyaudio, which lets Python access the
-        # computer's microphone to record sound.
-        import pyaudio
-    # If pyaudio isn't installed, catch the error and show a message.
-    except ImportError:
-        # Blank line before the error box.
-        print()
-        # Draw a box telling the user PyAudio is missing.
-        print("  ╔══════════════════════════════════════════════════╗")
-        print("  ║  PyAudio not installed — needed for microphone. ║")
-        print("  ║                                                ║")
-        # Show the pip command to install PyAudio.
-        print("  ║  Run:  pip install pyaudio                     ║")
-        print("  ╚══════════════════════════════════════════════════╝")
-        # Blank line after the box.
-        print()
-        # Return False because we can't access the microphone.
-        return False
-
-    # ── Get the AccessKey from config ─────────────────────────
-    # Pull the "porcupine_access_key" value out of the config
-    # dictionary. If it's not there, default to an empty string.
+    # ── Step 2: make sure we have a Picovoice AccessKey ──────────
     access_key = config.get("porcupine_access_key", "")
-    # Check if the access key is empty (not provided by the user).
     if not access_key:
-        # Blank line before the error box.
-        print()
-        # Draw a box explaining the missing AccessKey.
-        print("  ╔══════════════════════════════════════════════════╗")
-        print("  ║  Missing Porcupine AccessKey!                   ║")
-        print("  ║                                                ║")
-        # Step-by-step instructions to get a free key.
-        print("  ║  1. Go to: https://console.picovoice.ai/        ║")
-        print("  ║  2. Sign up for free (Hobby plan)              ║")
-        print("  ║  3. Copy your AccessKey                        ║")
-        print("  ║  4. Add to desktop/config.yaml:                ║")
-        # Show the exact YAML format the user needs in config.
-        print("  ║     porcupine_access_key: \"your-key-here\"     ║")
-        print("  ╚══════════════════════════════════════════════════╝")
-        # Blank line after the box.
-        print()
-        # Return False because we don't have a valid key.
+        _print_missing_access_key_help()
         return False
 
-    # ── Initialize Porcupine ──────────────────────────────────
-    # NOTE: We pass `keywords=["computer"]` below, which tells
-    # pvporcupine to use its own bundled built-in "computer" model.
-    # pvporcupine finds that file internally — we don't need to
-    # locate it ourselves. (An earlier version of this function
-    # manually hunted for the model's file path here, but that
-    # result was never actually used anywhere, so it was removed.)
-    # Print a status message so the user knows we're starting up.
-    print("  [wake] Initializing wake word engine...")
-    # Try to create a Porcupine instance. If it fails (bad key,
-    # network issue, etc.), we catch the error.
-    try:
-        # Create a Porcupine instance that listens for "Computer".
-        # `keywords=["computer"]` tells it to only listen for that
-        # one word. You can add multiple keywords if you want.
-        porcupine = pvporcupine.create(
-            access_key=access_key,
-            keywords=["computer"]  # Built-in keyword.
-            # You can also use custom .ppn files with `keyword_paths`.
-        )
-    # If anything goes wrong during initialization, catch the error.
-    except Exception as e:
-        # Print the error message so the user knows what failed.
-        print(f"  [wake] ERROR: Could not initialize Porcupine: {e}")
-        # Return False because we can't listen without Porcupine.
+    # ── Step 3: start up the wake word engine ────────────────────
+    porcupine = _init_porcupine(pvporcupine, access_key)
+    if porcupine is None:
         return False
 
-    # ── Open the microphone ───────────────────────────────────
-    # Create a PyAudio object that manages access to the mic.
+    # ── Step 4: open the microphone ───────────────────────────────
     p = pyaudio.PyAudio()
-    # Open an audio stream (a live connection to the microphone)
-    # with the correct settings that Porcupine expects.
     audio_stream = p.open(
         rate=porcupine.sample_rate,  # Porcupine needs 16000 Hz.
         channels=1,                   # Mono (single channel) audio.
@@ -171,81 +89,176 @@ def wait_for_wake_word(config):
         frames_per_buffer=porcupine.frame_length  # Chunk size.
     )
 
-    # Print a blank line before the fancy banner.
-    print()
-    # Draw a Star-Trek-themed startup banner in the terminal.
-    print("  ╔══════════════════════════════════════════════════╗")
-    print("  ║  🖖  Make It So Number One  🖖                 ║")
-    print("  ║                                                ║")
-    # Tell the user to say the wake word to activate the assistant.
-    print("  ║  Say \"Computer\" to activate...                ║")
-    print("  ║  Press Ctrl+C to quit.                         ║")
-    print("  ╚══════════════════════════════════════════════════╝")
-    # Print another blank line to make the banner stand out.
-    print()
+    _print_listening_banner()
 
-    # ── Main wake word detection loop ─────────────────────────
+    # ── Step 5: listen until the wake word is heard or Ctrl+C ────
     # Use try/except/finally so we can catch Ctrl+C and clean up.
     try:
-        # Loop forever (while True means "keep going until broken").
-        while True:
-            # Read one frame of audio from the microphone.
-            # porcupine.frame_length tells us how many samples to
-            # read. exception_on_overflow=False means don't crash if
-            # the audio buffer overflows (just drop the excess).
-            pcm = audio_stream.read(porcupine.frame_length,
-                                    exception_on_overflow=False)
-            # Convert the raw bytes to a tuple of signed 16-bit ints
-            # (the format Porcupine expects). The "<" means
-            # little-endian byte order, and "h" means signed 16-bit
-            # short. We multiply "h" by frame_length to unpack that
-            # many values.
-            pcm_tuple = struct.unpack_from(
-                "<" + "h" * porcupine.frame_length, pcm
-            )
-
-            # Process the audio — Porcupine returns the index of
-            # the detected keyword, or -1 if nothing was heard.
-            keyword_index = porcupine.process(pcm_tuple)
-
-            # If keyword_index is 0 or higher, a wake word was
-            # detected. -1 means nothing was heard.
-            if keyword_index >= 0:
-                # Wake word detected! The "computer" keyword is
-                # at index 0 (our only keyword).
-                print("  [wake] 🔺 \"Computer\" detected!")
-                # Return True to tell the caller the wake word
-                # was heard and we're ready to record a command.
-                return True
-
+        return _detection_loop(porcupine, audio_stream)
     # If the user presses Ctrl+C on their keyboard, Python raises
     # a KeyboardInterrupt exception. We catch it here to shut down
     # gracefully instead of showing an ugly error message.
     except KeyboardInterrupt:
         # User pressed Ctrl+C — clean up and exit.
-        # Print a blank line to separate from the continuous output.
         print()
-        # Tell the user we're shutting down because they pressed Ctrl+C.
         print("  [wake] Shutting down...")
-        # Return False because we didn't detect the wake word.
         return False
-
     # The "finally" block runs NO MATTER WHAT — whether the try
     # succeeded, failed, or was interrupted. This guarantees we
     # always clean up resources like the microphone and Porcupine.
     finally:
-        # Check if 'audio_stream' was created (exists in the list
-        # of local variables). If it does, we need to close it.
-        if 'audio_stream' in locals():
-            # Stop the microphone stream from recording.
-            audio_stream.stop_stream()
-            # Close the stream to release the microphone hardware.
-            audio_stream.close()
-        # Check if 'p' (the PyAudio object) was created.
-        if 'p' in locals():
-            # Terminate the PyAudio session to release resources.
-            p.terminate()
-        # Check if 'porcupine' (the Porcupine engine) was created.
-        if 'porcupine' in locals():
-            # Delete the Porcupine instance from memory.
-            porcupine.delete()
+        # Stop the microphone stream from recording.
+        audio_stream.stop_stream()
+        # Close the stream to release the microphone hardware.
+        audio_stream.close()
+        # Terminate the PyAudio session to release resources.
+        p.terminate()
+        # Delete the Porcupine instance from memory.
+        porcupine.delete()
+
+
+def _import_pvporcupine():
+    """
+    Try to import the pvporcupine library (Picovoice's wake word
+    detection engine). Returns the imported module on success, or
+    None (after printing setup instructions) if it isn't installed.
+
+    "try/except ImportError" is the standard Python pattern for
+    treating a missing optional library as a normal, recoverable
+    situation instead of letting the program crash with a scary
+    traceback.
+    """
+    try:
+        import pvporcupine
+        return pvporcupine
+    except ImportError:
+        print()
+        print("  ╔══════════════════════════════════════════════════╗")
+        print("  ║  Porcupine wake word engine not installed.      ║")
+        print("  ║                                                ║")
+        print("  ║  Run:  pip install pvporcupine                  ║")
+        print("  ║                                                ║")
+        print("  ║  Then get a FREE AccessKey at:                  ║")
+        print("  ║  https://console.picovoice.ai/                   ║")
+        print("  ╚══════════════════════════════════════════════════╝")
+        print()
+        return None
+
+
+def _import_pyaudio():
+    """
+    Try to import pyaudio, which lets Python access the computer's
+    microphone. Returns the imported module on success, or None
+    (after printing setup instructions) if it isn't installed.
+    """
+    try:
+        import pyaudio
+        return pyaudio
+    except ImportError:
+        print()
+        print("  ╔══════════════════════════════════════════════════╗")
+        print("  ║  PyAudio not installed — needed for microphone. ║")
+        print("  ║                                                ║")
+        print("  ║  Run:  pip install pyaudio                     ║")
+        print("  ╚══════════════════════════════════════════════════╝")
+        print()
+        return None
+
+
+def _print_missing_access_key_help():
+    """Print step-by-step instructions for getting a free AccessKey."""
+    print()
+    print("  ╔══════════════════════════════════════════════════╗")
+    print("  ║  Missing Porcupine AccessKey!                   ║")
+    print("  ║                                                ║")
+    print("  ║  1. Go to: https://console.picovoice.ai/        ║")
+    print("  ║  2. Sign up for free (Hobby plan)              ║")
+    print("  ║  3. Copy your AccessKey                        ║")
+    print("  ║  4. Add to desktop/config.yaml:                ║")
+    print("  ║     porcupine_access_key: \"your-key-here\"     ║")
+    print("  ╚══════════════════════════════════════════════════╝")
+    print()
+
+
+def _init_porcupine(pvporcupine, access_key):
+    """
+    Create and return a Porcupine wake-word-detection instance
+    listening for "computer", or None if creation fails (bad key,
+    network issue, etc.).
+
+    NOTE: We pass `keywords=["computer"]` below, which tells
+    pvporcupine to use its own bundled built-in "computer" model.
+    pvporcupine finds that file internally — we don't need to
+    locate it ourselves. (An earlier version of this function
+    manually hunted for the model's file path here, but that
+    result was never actually used anywhere, so it was removed.)
+    """
+    print("  [wake] Initializing wake word engine...")
+    try:
+        # Create a Porcupine instance that listens for "Computer".
+        # `keywords=["computer"]` tells it to only listen for that
+        # one word. You can add multiple keywords if you want.
+        return pvporcupine.create(
+            access_key=access_key,
+            keywords=["computer"]  # Built-in keyword.
+            # You can also use custom .ppn files with `keyword_paths`.
+        )
+    except Exception as e:
+        print(f"  [wake] ERROR: Could not initialize Porcupine: {e}")
+        return None
+
+
+def _print_listening_banner():
+    """Print the Star-Trek-themed startup banner."""
+    print()
+    print("  ╔══════════════════════════════════════════════════╗")
+    print("  ║  🖖  Make It So Number One  🖖                 ║")
+    print("  ║                                                ║")
+    print("  ║  Say \"Computer\" to activate...                ║")
+    print("  ║  Press Ctrl+C to quit.                         ║")
+    print("  ╚══════════════════════════════════════════════════╝")
+    print()
+
+
+def _detection_loop(porcupine, audio_stream):
+    """
+    Read audio from the microphone forever, one Porcupine "frame" at
+    a time, until the wake word "computer" is detected.
+
+    RETURNS
+    -------
+    bool
+        Always True — this function only returns once the wake word
+        has actually been heard; any other way out of listening
+        (Ctrl+C, an error) happens via an exception, which the
+        caller's try/except/finally handles instead.
+    """
+    # Loop forever (while True means "keep going until broken").
+    while True:
+        # Read one frame of audio from the microphone.
+        # porcupine.frame_length tells us how many samples to
+        # read. exception_on_overflow=False means don't crash if
+        # the audio buffer overflows (just drop the excess).
+        pcm = audio_stream.read(
+            porcupine.frame_length, exception_on_overflow=False
+        )
+        # Convert the raw bytes to a tuple of signed 16-bit ints
+        # (the format Porcupine expects). The "<" means
+        # little-endian byte order, and "h" means signed 16-bit
+        # short. We multiply "h" by frame_length to unpack that
+        # many values.
+        pcm_tuple = struct.unpack_from(
+            "<" + "h" * porcupine.frame_length, pcm
+        )
+
+        # Process the audio — Porcupine returns the index of
+        # the detected keyword, or -1 if nothing was heard.
+        keyword_index = porcupine.process(pcm_tuple)
+
+        # If keyword_index is 0 or higher, a wake word was
+        # detected. -1 means nothing was heard.
+        if keyword_index >= 0:
+            # Wake word detected! The "computer" keyword is
+            # at index 0 (our only keyword).
+            print("  [wake] 🔺 \"Computer\" detected!")
+            return True

@@ -70,34 +70,7 @@ def build():
     # we can reference other files relative to this location.
     script_dir = os.path.dirname(os.path.abspath(__file__))
 
-    # ── Check PyInstaller is installed ───────────────────────────
-    # Try to import PyInstaller. If it's not installed, this will
-    # raise an ImportError, which we catch below.
-    try:
-        # Attempt to import the PyInstaller module.
-        # If this succeeds, we know PyInstaller is installed and
-        # available on the system.
-        import PyInstaller
-    # If the import fails, catch the ImportError so we can show a
-    # helpful message instead of a scary traceback.
-    except ImportError:
-        # Print a blank line for spacing.
-        print()
-        # Print the top border of an error message box.
-        print("  ╔══════════════════════════════════════════════════╗")
-        # Print the error message telling the user what's missing.
-        print("  ║  PyInstaller not installed!                    ║")
-        # Print an empty separator line.
-        print("  ║                                                ║")
-        # Print the fix: the pip install command.
-        print("  ║  Run:  pip install pyinstaller                  ║")
-        # Print the bottom border of the box.
-        print("  ╚══════════════════════════════════════════════════╝")
-        # Print a blank line after the box.
-        print()
-        # Exit the script with an error code (1 means "something went
-        # wrong"). This stops the build process immediately.
-        sys.exit(1)
+    _ensure_pyinstaller_installed()
 
     # Print a message saying the build has started.
     print("  [build] Starting PyInstaller build...")
@@ -105,6 +78,54 @@ def build():
     # from the right place.
     print(f"  [build] Source: {script_dir}")
 
+    _clean_previous_build(script_dir)
+
+    cmd = _build_pyinstaller_command(script_dir)
+    _run_pyinstaller(cmd)
+    _print_success_message()
+
+
+def _ensure_pyinstaller_installed():
+    """
+    Confirm the PyInstaller package is importable, or print install
+    instructions and exit the script if it isn't.
+
+    Exits (rather than returning False) because every remaining step
+    of build() depends on PyInstaller being present — there's no
+    useful partial build to fall back to, unlike the optional-
+    dependency patterns used elsewhere in this codebase (e.g.
+    Vosk/Whisper in stt.py) where a missing library just disables
+    one feature.
+    """
+    try:
+        # Attempt to import the PyInstaller module. If this succeeds,
+        # we know PyInstaller is installed and available on the
+        # system. We don't need to use the module itself here — the
+        # import succeeding or failing is the only thing we care
+        # about, since the actual build runs PyInstaller as a
+        # separate command-line program via subprocess, not through
+        # this Python import.
+        import PyInstaller
+    except ImportError:
+        print()
+        print("  ╔══════════════════════════════════════════════════╗")
+        print("  ║  PyInstaller not installed!                    ║")
+        print("  ║                                                ║")
+        print("  ║  Run:  pip install pyinstaller                  ║")
+        print("  ╚══════════════════════════════════════════════════╝")
+        print()
+        # Exit the script with an error code (1 means "something went
+        # wrong"). This stops the build process immediately.
+        sys.exit(1)
+
+
+def _clean_previous_build(script_dir):
+    """
+    Delete leftover files from a previous build (the dist/ and
+    build/ folders, and the generated .spec file) so PyInstaller
+    starts completely fresh instead of possibly reusing stale
+    cached data.
+    """
     # ── Clean previous builds ────────────────────────────────────
     # Remove old dist/ and build/ folders so we start fresh.
     # Loop through a list of folder names ["dist", "build"] that
@@ -134,6 +155,18 @@ def build():
         # new build. We want PyInstaller to generate a fresh one.
         os.remove(spec_path)
 
+
+def _build_pyinstaller_command(script_dir):
+    """
+    Assemble the full PyInstaller command-line invocation as a list
+    of argument strings, ready to hand to subprocess.run().
+
+    RETURNS
+    -------
+    list of str
+        The command and all its flags, e.g.
+        ["pyinstaller", "--onefile", "--name", "MakeItSo", ...].
+    """
     # ── Build command ────────────────────────────────────────────
     # These are the PyInstaller flags:
     #   --onefile         = Single executable (not a folder).
@@ -226,6 +259,15 @@ def build():
     # This is the entry point that runs when the user launches the app.
     cmd.append(os.path.join(script_dir, "make_it_so.py"))
 
+    return cmd
+
+
+def _run_pyinstaller(cmd):
+    """
+    Actually run the assembled PyInstaller command and stream its
+    output live to the terminal. Exits the script with an error code
+    if the build itself fails.
+    """
     # ── Run PyInstaller ──────────────────────────────────────────
     # Print the full command for debugging purposes.
     # `' '.join(cmd)` turns the list into a space-separated string.
@@ -235,7 +277,11 @@ def build():
 
     # Try to run the PyInstaller command and catch errors.
     try:
-        # Run the command using subprocess.run().
+        # Run the command using subprocess.run(). We deliberately do
+        # NOT pass capture_output=True here (unlike most subprocess
+        # calls elsewhere in this codebase) — PyInstaller's build
+        # output is long and useful to watch live, so we let it print
+        # straight to our terminal as it runs instead of capturing it.
         # `check=True` means Python will raise an error if the command
         # returns a non-zero exit code (indicating failure).
         subprocess.run(cmd, check=True)
@@ -246,7 +292,16 @@ def build():
         # Exit the script with an error code to signal failure.
         sys.exit(1)
 
+
+def _print_success_message():
+    """Print the final "build complete" box with the output path."""
     # ── Done ────────────────────────────────────────────────────
+    # Import here (rather than at the top of the file) since this is
+    # the only other function besides _build_pyinstaller_command that
+    # needs to know the current OS, and importing right where it's
+    # used keeps that dependency visible locally.
+    import platform
+
     # Print a blank line for spacing.
     print()
     # Print the top of a success message box.
@@ -256,21 +311,16 @@ def build():
     # Print a separator line.
     print("  ║                                                ║")
     # Check the platform again to show the correct output path format.
+    print("  ║  Your app is at:                                ║")
     if platform.system() == "Darwin":
         # macOS: the output is a .app bundle.
-        print("  ║  Your app is at:                                ║")
-        # Print the relative path to the macOS app.
-        print(f"  ║  desktop/dist/MakeItSo.app              ║")
+        print("  ║  desktop/dist/MakeItSo.app              ║")
     elif platform.system() == "Windows":
         # Windows: the output is a .exe file.
-        print("  ║  Your app is at:                                ║")
-        # Print the relative path to the Windows executable.
-        print(f"  ║  desktop/dist/MakeItSo.exe              ║")
+        print("  ║  desktop/dist/MakeItSo.exe              ║")
     else:
         # Linux: the output is an executable binary with no extension.
-        print("  ║  Your app is at:                                ║")
-        # Print the relative path to the Linux binary.
-        print(f"  ║  desktop/dist/MakeItSo                  ║")
+        print("  ║  desktop/dist/MakeItSo                  ║")
     # Print a separator line.
     print("  ║                                                ║")
     # Print a note that the app is portable (no Python needed).

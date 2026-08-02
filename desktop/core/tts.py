@@ -77,86 +77,13 @@ def speak(text):
         # Check if the system is macOS (Apple calls it "Darwin"
         # internally, named after Charles Darwin).
         if system == "Darwin":
-            # ── macOS: `say` command ─────────────────────────────
-            # The `say` command has been part of macOS since the
-            # beginning. It uses the built-in TTS voices.
-            # Voice "Samantha" is clear and pleasant.
-            # subprocess.run() runs a command in the terminal.
-            # We pass a list: ["say", "-v", "Samantha", text].
-            # This is equivalent to typing in Terminal:
-            #   say -v Samantha "Hello world"
-            subprocess.run(
-                ["say", "-v", "Samantha", text],
-                check=True,   # Raise an error if the command fails.
-                timeout=30    # Stop if it takes longer than 30 secs.
-            )
-
-        # Otherwise, check if the system is Linux.
+            _speak_macos(text)
         elif system == "Linux":
-            # ── Linux: try `espeak`, fall back to `spd-say` ──────
-            # espeak is the most common Linux TTS. On Raspberry Pi
-            # install it with: sudo apt install espeak
-            # Try to run espeak first. If it's not installed, we'll
-            # catch the FileNotFoundError and try something else.
-            try:
-                # Run "espeak" with the text as an argument.
-                subprocess.run(
-                    ["espeak", text],
-                    check=True,   # Raise error if espeak fails.
-                    timeout=30    # Stop after 30 seconds.
-                )
-            # If "espeak" is not installed, Python raises
-            # FileNotFoundError (the executable wasn't found).
-            except FileNotFoundError:
-                # espeak not installed — try speech-dispatcher's
-                # "spd-say" command as a fallback.
-                try:
-                    # Run "spd-say" with the text as an argument.
-                    subprocess.run(
-                        ["spd-say", text],
-                        check=True,   # Raise error if it fails.
-                        timeout=30    # Stop after 30 seconds.
-                    )
-                # If neither espeak nor spd-say are installed,
-                # catch the FileNotFoundError again.
-                except FileNotFoundError:
-                    # Print a helpful message telling the user to
-                    # install espeak so speech will work.
-                    print("  [tts] No TTS found. Install espeak:")
-                    print("    sudo apt install espeak")
-
-        # Otherwise, check if the system is Windows.
+            _speak_linux(text)
         elif system == "Windows":
-            # ── Windows: PowerShell SAPI ─────────────────────────
-            # Windows has a built-in SAPI (Speech API) that can be
-            # accessed via PowerShell. No extra install needed.
-            # Build a PowerShell command string that:
-            # 1. Loads the System.Speech library (Add-Type).
-            # 2. Creates a SpeechSynthesizer object.
-            # 3. Calls .Speak() with the text.
-            # We use .replace() to escape any double quotes in the
-            # text so they don't break the PowerShell command.
-            # NOTE: PowerShell's escape character is the backtick
-            # (`), not a backslash — inside a double-quoted string,
-            # a literal " must become `" (or ""). Using a backslash
-            # here (as you would in Python or C) does NOT escape
-            # anything in PowerShell, so a spoken response containing
-            # a quote character would have broken the command.
-            ps_script = (
-                f'Add-Type -AssemblyName System.Speech; '
-                f'$s=New-Object System.Speech.Synthesis.SpeechSynthesizer; '
-                f'$s.Speak("{text.replace(chr(34), chr(96) + chr(34))}")'
-            )
-            # Run the PowerShell command. "powershell" is the
-            # program, "-Command" tells it to run a script string.
-            subprocess.run(
-                ["powershell", "-Command", ps_script],
-                check=True,   # Raise error if PowerShell fails.
-                timeout=30    # Stop after 30 seconds.
-            )
-
-        # If we get here, the OS wasn't macOS, Linux, or Windows.
+            _speak_windows(text)
         else:
+            # If we get here, the OS wasn't macOS, Linux, or Windows.
             # Print an error message showing what OS was detected
             # (so the user can tell us about it for future support).
             print(f"  [tts] Unknown OS: {system}. Cannot speak.")
@@ -173,3 +100,90 @@ def speak(text):
         # Print the error message so the user knows what happened
         # and can report it for debugging.
         print(f"  [tts] Error during speech: {e}")
+
+
+def _speak_macos(text):
+    """
+    Speak text aloud on macOS using the built-in `say` command.
+
+    The `say` command has been part of macOS since the beginning.
+    It uses the built-in TTS voices. Voice "Samantha" is clear and
+    pleasant. subprocess.run() runs a command in the terminal — we
+    pass a list: ["say", "-v", "Samantha", text]. This is equivalent
+    to typing in Terminal:
+        say -v Samantha "Hello world"
+    """
+    subprocess.run(
+        ["say", "-v", "Samantha", text],
+        check=True,   # Raise an error if the command fails.
+        timeout=30    # Stop if it takes longer than 30 secs.
+    )
+
+
+def _speak_linux(text):
+    """
+    Speak text aloud on Linux, trying `espeak` first and falling
+    back to speech-dispatcher's `spd-say` if espeak isn't installed.
+
+    espeak is the most common Linux TTS. On Raspberry Pi install it
+    with: sudo apt install espeak
+    """
+    try:
+        # Run "espeak" with the text as an argument.
+        subprocess.run(
+            ["espeak", text],
+            check=True,   # Raise error if espeak fails.
+            timeout=30    # Stop after 30 seconds.
+        )
+    # If "espeak" is not installed, Python raises FileNotFoundError
+    # (the executable wasn't found on the system's PATH).
+    except FileNotFoundError:
+        # espeak not installed — try speech-dispatcher's "spd-say"
+        # command as a fallback.
+        try:
+            subprocess.run(
+                ["spd-say", text],
+                check=True,   # Raise error if it fails.
+                timeout=30    # Stop after 30 seconds.
+            )
+        # If neither espeak nor spd-say are installed, catch the
+        # FileNotFoundError again.
+        except FileNotFoundError:
+            # Print a helpful message telling the user to install
+            # espeak so speech will work.
+            print("  [tts] No TTS found. Install espeak:")
+            print("    sudo apt install espeak")
+
+
+def _speak_windows(text):
+    """
+    Speak text aloud on Windows using the built-in SAPI (Speech API)
+    via a PowerShell one-liner. No extra install needed.
+
+    The PowerShell script:
+    1. Loads the System.Speech library (Add-Type).
+    2. Creates a SpeechSynthesizer object.
+    3. Calls .Speak() with the text.
+
+    NOTE: PowerShell's escape character is the backtick (`), not a
+    backslash — inside a double-quoted string, a literal " must
+    become `" (or ""). Using a backslash here (as you would in
+    Python or C) does NOT escape anything in PowerShell, so a
+    spoken response containing a quote character would have broken
+    the command. `.replace()` swaps every literal double-quote in
+    the text for a backtick followed by a double-quote so
+    PowerShell treats it as a normal character inside the string
+    instead of ending the string early.
+    """
+    ps_script = (
+        f'Add-Type -AssemblyName System.Speech; '
+        f'$s=New-Object System.Speech.Synthesis.SpeechSynthesizer; '
+        f'$s.Speak("{text.replace(chr(34), chr(96) + chr(34))}")'
+    )
+    # Run the PowerShell command. "powershell" is the program,
+    # "-Command" tells it to run a script string.
+    subprocess.run(
+        ["powershell", "-Command", ps_script],
+        check=True,   # Raise error if PowerShell fails.
+        timeout=30    # Stop after 30 seconds.
+    )

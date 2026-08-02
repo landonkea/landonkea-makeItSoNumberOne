@@ -109,154 +109,23 @@ def main():
         # catch the error instead of crashing. This makes the program
         # resilient — it keeps running even after mistakes.
         try:
-            # ====== STEP 1 & 2: WAKE WORD ========================
-            # Listen for "Computer" on the microphone. This blocks
-            # (keeps running) until the word is detected.
-            # Import the `wake_word` module from the `core` package.
-            # `from core import wake_word` loads the file
-            # core/wake_word.py so we can use its functions.
-            from core import wake_word
-
-            # Print a blank line to separate this cycle from the last.
-            print()
-            # Print the top of a box telling the user to say "Computer".
-            # The box is made of Unicode box-drawing characters.
-            print("  ╔══════════════════════════════════════════════════╗")
-            # Print the instruction text inside the box.
-            print("  ║       Say \"Computer\" to activate...           ║")
-            # Print the bottom of the box.
-            print("  ╚══════════════════════════════════════════════════╝")
-            # Print a blank line after the box for spacing.
-            print()
-
-            # Call the `wait_for_wake_word` function and check if it
-            # returns False (meaning something went wrong or the user
-            # wants to quit). The function blocks (waits) until the
-            # wake word is heard or an error occurs.
-            if not wake_word.wait_for_wake_word(config):
-                # If the function returned False, break out of the
-                # infinite while loop. `break` means "exit the loop
-                # immediately."
-                break
-
-            # ====== STEP 3: PLAY CHIME ============================
-            # Acknowledge the wake word with the classic Star Trek
-            # two-tone computer chime.
-            # Import the `audio` module from the `core` package.
-            # This module handles playing sounds and recording audio.
-            from core import audio
-            # Call the `play_chime` function which plays the Star Trek
-            # chime WAV file through the computer's speakers.
-            audio.play_chime()
-
-            # ====== STEP 4 & 5: LISTEN & TRANSCRIBE ==============
-            # Record the user's voice until they stop speaking,
-            # then convert it to text using Whisper.
-            # Import the `stt` (Speech To Text) module from `core`.
-            from core import stt
-
-            # Record audio from the microphone until the user stops
-            # speaking. `timeout_seconds=10` means if they don't speak
-            # for 10 seconds, stop recording anyway. This returns the
-            # raw audio data (as bytes) or None if nothing was heard.
-            audio_data = audio.record_until_silence(timeout_seconds=10)
-            # Check if no audio was captured (they didn't say anything).
-            # `is None` checks if the variable equals Python's None
-            # (which means "no value").
-            if audio_data is None:
-                # Print a message saying we're going back to sleep mode.
-                print("  [main] No speech detected. Going back to sleep.")
-                # `continue` means "skip the rest of this loop cycle and
-                # start the next iteration from the top." Goes back to
-                # listening for "Computer."
-                continue
-
-            # Send the audio data to Whisper (OpenAI's speech-to-text)
-            # and get back the transcribed text. The `transcribe`
-            # function takes the audio bytes and the config (for the
-            # API key) and returns a string of what was said.
-            user_text = stt.transcribe(audio_data, config)
-            # Check if transcription failed (returned None or empty string).
-            # `not user_text` is True for None, empty string "", or False.
-            if not user_text:
-                # Print a message so the user knows transcription failed.
-                print("  [main] Could not transcribe. Going back to sleep.")
-                # Skip to the next loop iteration (go back to sleep).
-                continue
-
-            # ====== STEP 6: THINK (AI) ==============================
-            # Send the transcribed text to the AI brain (Claude if
-            # online, Ollama/Llama if offline). Returns what to say
-            # and what actions to execute.
-            from core import ai
-
-            # Call `process_with_ai` passing the user's text, the
-            # config (API keys + mode setting), and conversation
-            # history for context. This function tries online first
-            # (Claude), then automatically falls back to offline
-            # (Ollama) if online is unavailable.
-            result = ai.process_with_ai(
-                user_text,
-                config,
-                conversation_history
+            # `run_one_conversation_cycle` does everything from "wait
+            # for the wake word" through "speak the reply and run any
+            # actions." It's pulled out into its own function (below)
+            # so this loop's job is just "run one cycle, and decide
+            # whether to keep looping" — the details of what a cycle
+            # involves live in one focused place instead of inline
+            # here.
+            keep_running = run_one_conversation_cycle(
+                config, conversation_history
             )
-
-            # Check if Claude returned None (meaning the API call failed).
-            # We can't continue without a response from Claude.
-            if result is None:
-                # Print the error message and return to sleep mode.
-                print("  [main] Claude did not respond. Going back to sleep.")
-                # Skip to the next loop iteration.
-                continue
-
-            # Extract the spoken text from Claude's response.
-            # `.get("spoken_text", "")` gets the value for that key,
-            # or returns empty string if the key is missing.
-            spoken_text = result.get("spoken_text", "")
-            # Extract the list of actions from Claude's response.
-            # If there are no actions, we get an empty list.
-            actions = result.get("actions", [])
-
-            # Add this exchange to the conversation history so
-            # Claude remembers what was said before.
-            # `append` adds one item to the end of the list.
-            # First, add the user's message.
-            conversation_history.append({
-                "role": "user",
-                "content": user_text
-            })
-            # Then, add Claude's response message.
-            conversation_history.append({
-                "role": "assistant",
-                "content": f"RESPONSE: {spoken_text}"
-            })
-
-            # ====== STEP 7: SPEAK ================================
-            # Speak Claude's response aloud using the system's
-            # text-to-speech engine.
-            # Check if there IS spoken text to say (not empty).
-            # If it's empty, we skip speaking.
-            if spoken_text:
-                # Import the `tts` (Text To Speech) module from `core`.
-                from core import tts
-                # Call the `speak` function to read the text aloud
-                # through the computer's speakers.
-                tts.speak(spoken_text)
-
-            # ====== STEP 8: ACT =================================
-            # Execute any actions Claude returned (open apps,
-            # search web, type text, etc.).
-            # Check if there are any actions to perform.
-            # A non-empty list is "truthy" (treated as True) in Python.
-            if actions:
-                # Import the `action_router` module from `core`.
-                # This module decides WHICH action handler to call
-                # based on the action name.
-                from core import action_router
-                # Call `execute_actions` to run all the actions.
-                # It loops through each action and runs the right
-                # handler (like open_app, search_web, etc.).
-                action_router.execute_actions(actions, config)
+            if not keep_running:
+                # The wake word listener returned False, meaning it
+                # hit an unrecoverable error (missing dependency,
+                # bad AccessKey, etc.) rather than a normal Ctrl+C.
+                # `break` exits the infinite while loop, ending the
+                # program the same way a fatal error should.
+                break
 
             # Keep conversation history manageable (last 10
             # exchanges max).
@@ -298,6 +167,173 @@ def main():
             # makes the program wait for 1 second so we don't
             # immediately spam errors if something is broken.
             time.sleep(1)
+
+
+def run_one_conversation_cycle(config, conversation_history):
+    """
+    Run exactly one wake -> listen -> think -> speak -> act cycle,
+    mutating `conversation_history` in place as the exchange happens.
+
+    PARAMETERS
+    ----------
+    config : dict
+        App configuration (API keys, mode setting) loaded once at
+        startup and reused for every cycle.
+    conversation_history : list of dict
+        The running list of {"role", "content"} exchanges so far.
+        This function APPENDS to it directly (lists are mutable and
+        shared by reference in Python, so changes here are visible
+        to the caller's copy of the same list too) rather than
+        returning a new list, since the caller needs to keep using
+        the same list across every cycle of the main loop.
+
+    RETURNS
+    -------
+    bool
+        True to keep the main loop running (this is the normal case
+        — even a cycle where the user said nothing understandable
+        still returns True so we go back to listening). False only
+        when the wake word listener itself reports a fatal setup
+        problem, signaling the whole program should stop.
+    """
+    if not _listen_for_wake_word(config):
+        return False
+
+    audio_data = _record_user_speech()
+    if audio_data is None:
+        print("  [main] No speech detected. Going back to sleep.")
+        return True
+
+    user_text = _transcribe_speech(audio_data, config)
+    if not user_text:
+        print("  [main] Could not transcribe. Going back to sleep.")
+        return True
+
+    result = _ask_ai(user_text, config, conversation_history)
+    if result is None:
+        print("  [main] Claude did not respond. Going back to sleep.")
+        return True
+
+    spoken_text = result.get("spoken_text", "")
+    actions = result.get("actions", [])
+    _record_exchange(conversation_history, user_text, spoken_text)
+
+    _speak_reply(spoken_text)
+    _run_actions(actions, config)
+
+    return True
+
+
+def _listen_for_wake_word(config):
+    """
+    Block until the wake word "Computer" is heard.
+
+    RETURNS
+    -------
+    bool
+        True once the wake word is detected. False if the wake word
+        listener hit a fatal setup problem (missing dependency,
+        missing AccessKey, etc.) and the whole program should stop.
+    """
+    # Import the `wake_word` module from the `core` package here
+    # (rather than at the top of the file) so that a machine missing
+    # one of this module's optional dependencies only fails when
+    # this specific feature is actually used, not at startup.
+    from core import wake_word
+
+    print()
+    print("  ╔══════════════════════════════════════════════════╗")
+    print("  ║       Say \"Computer\" to activate...           ║")
+    print("  ╚══════════════════════════════════════════════════╝")
+    print()
+
+    return wake_word.wait_for_wake_word(config)
+
+
+def _record_user_speech():
+    """
+    Play the acknowledgment chime, then record the user's voice
+    until they stop speaking.
+
+    RETURNS
+    -------
+    bytes or None
+        Raw recorded audio, or None if no speech was detected.
+    """
+    # ====== PLAY CHIME ============================
+    # Acknowledge the wake word with the classic Star Trek two-tone
+    # computer chime.
+    from core import audio
+    audio.play_chime()
+
+    # ====== LISTEN ============================
+    # Record audio from the microphone until the user stops
+    # speaking. `timeout_seconds=10` means if they don't speak
+    # for 10 seconds, stop recording anyway. This returns the
+    # raw audio data (as bytes) or None if nothing was heard.
+    return audio.record_until_silence(timeout_seconds=10)
+
+
+def _transcribe_speech(audio_data, config):
+    """
+    Convert recorded audio to text using the speech-to-text module.
+
+    RETURNS
+    -------
+    str or None
+        The transcribed text, or None/empty string if transcription
+        failed.
+    """
+    from core import stt
+    return stt.transcribe(audio_data, config)
+
+
+def _ask_ai(user_text, config, conversation_history):
+    """
+    Send the transcribed text to the AI brain (Claude if online,
+    Ollama/Llama if offline) and get back what to say and do.
+
+    RETURNS
+    -------
+    dict or None
+        {"spoken_text": str, "actions": list}, or None if every
+        available AI backend failed to respond.
+    """
+    from core import ai
+    return ai.process_with_ai(user_text, config, conversation_history)
+
+
+def _record_exchange(conversation_history, user_text, spoken_text):
+    """
+    Append this turn's user message and assistant reply to the
+    shared conversation history list so future turns have context.
+    """
+    conversation_history.append({
+        "role": "user",
+        "content": user_text
+    })
+    conversation_history.append({
+        "role": "assistant",
+        "content": f"RESPONSE: {spoken_text}"
+    })
+
+
+def _speak_reply(spoken_text):
+    """Speak the AI's reply aloud, if there is any text to say."""
+    if spoken_text:
+        # Import the `tts` (Text To Speech) module from `core`.
+        from core import tts
+        tts.speak(spoken_text)
+
+
+def _run_actions(actions, config):
+    """Execute any actions the AI returned (open apps, search, etc.)."""
+    if actions:
+        # Import the `action_router` module from `core`. This module
+        # decides WHICH action handler to call based on the action
+        # name.
+        from core import action_router
+        action_router.execute_actions(actions, config)
 
 
 # Define a function that loads configuration from a YAML file.

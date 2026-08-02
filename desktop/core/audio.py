@@ -291,6 +291,10 @@ def record_until_silence(timeout_seconds=10):
                                 # user is done speaking.
 
     # ── Initialize PyAudio ────────────────────────────────────
+    # PyAudio is the library that gives Python access to the
+    # computer's audio hardware. `PyAudio()` creates the top-level
+    # object that manages that connection; we'll ask it to open a
+    # microphone "stream" (a live, ongoing feed of audio data) next.
     p = pyaudio.PyAudio()
 
     # Open the microphone stream.
@@ -307,25 +311,104 @@ def record_until_silence(timeout_seconds=10):
     print(f"  [audio] Will stop after {SILENCE_LIMIT_SECONDS}s of silence"
           f" or {timeout_seconds}s total.")
 
+    try:
+        frames = _record_chunks_until_silence(
+            stream, CHUNK, RATE, timeout_seconds, SILENCE_LIMIT_SECONDS
+        )
+    finally:
+        # ── Clean up ──────────────────────────────────────────
+        # This runs whether recording finished normally or raised an
+        # exception, so we never leave the microphone hardware
+        # "held open" by a crashed recording — that would block any
+        # later attempt to record again until the whole app restarts.
+        stream.stop_stream()
+        stream.close()
+        p.terminate()
+
+    if not frames:
+        print("  [audio] No speech detected.")
+        return None
+
+    # Combine all audio chunks into one big byte string.
+    audio_data = b"".join(frames)
+    duration = len(frames) * CHUNK / RATE
+    print(f"  [audio] Recorded {len(audio_data)} bytes ({duration:.1f}s)")
+
+    return audio_data
+
+
+def _chunk_loudness(chunk_bytes):
+    """
+    Measure how loud one chunk of raw audio is.
+
+    PARAMETERS
+    ----------
+    chunk_bytes : bytes
+        One chunk of raw 16-bit PCM audio samples.
+
+    RETURNS
+    -------
+    float
+        The RMS (Root Mean Square) amplitude of the chunk — a
+        single number representing how loud it is. 0 means silence;
+        larger numbers mean louder sound. RMS is the standard way to
+        measure audio loudness because it accounts for every sample
+        in the chunk (unlike, say, just taking the single loudest
+        sample), and squaring each value before averaging makes
+        loud and quiet moments cancel out less than they would with
+        a simple average — which matters because a raw sine wave's
+        positive and negative halves would otherwise average toward
+        zero even during loud speech.
+    """
+    # Convert the raw bytes back into a tuple of individual 16-bit
+    # signed numbers (same unpacking technique used elsewhere in
+    # this codebase for reading PCM audio).
+    samples = struct.unpack_from(
+        "<" + "h" * (len(chunk_bytes) // 2), chunk_bytes
+    )
+    if not samples:
+        return 0
+    # RMS formula: square every sample (so negative and positive
+    # values both count as "loud" instead of cancelling out), take
+    # the average of those squares, then take the square root to
+    # bring the result back to a normal amplitude scale.
+    return math.sqrt(sum(s * s for s in samples) / len(samples))
+
+
+def _record_chunks_until_silence(
+    stream, chunk_size, rate, timeout_seconds, silence_limit_seconds
+):
+    """
+    Read audio chunks from an open microphone stream until the user
+    has spoken and then gone quiet for `silence_limit_seconds`, or
+    until `timeout_seconds` total have elapsed.
+
+    RETURNS
+    -------
+    list of bytes
+        The recorded chunks (including the leading silence right
+        before speech started, and the trailing pause that signaled
+        the user was done — trimming those isn't necessary for
+        speech-to-text accuracy). Empty list if no speech was ever
+        detected.
+    """
     frames = []          # Stores all the audio chunks we record.
     has_started = False  # Has the user started speaking yet?
     silence_chunks = 0   # How many consecutive silent chunks.
-    max_chunks = int(timeout_seconds * RATE / CHUNK)
+    max_chunks = int(timeout_seconds * rate / chunk_size)
     total_chunks = 0
 
     while total_chunks < max_chunks:
         # Read one chunk of audio from the microphone.
-        data = stream.read(CHUNK, exception_on_overflow=False)
+        # `exception_on_overflow=False` tells PyAudio not to raise an
+        # error if our program reads chunks slightly slower than the
+        # microphone produces them (a common hiccup under system
+        # load) — we'd rather silently drop a few audio samples than
+        # crash the whole recording.
+        data = stream.read(chunk_size, exception_on_overflow=False)
         total_chunks += 1
 
-        # Calculate the loudness (RMS amplitude) of this chunk.
-        # RMS = Root Mean Square — a standard way to measure audio
-        # level that gives a single number for how "loud" a chunk is.
-        samples = struct.unpack_from("<" + "h" * (len(data) // 2), data)
-        if samples:
-            rms = math.sqrt(sum(s * s for s in samples) / len(samples))
-        else:
-            rms = 0
+        rms = _chunk_loudness(data)
 
         if rms > SILENCE_THRESHOLD:
             # The user is speaking (this chunk is loud enough).
@@ -342,24 +425,10 @@ def record_until_silence(timeout_seconds=10):
                 silence_chunks += 1
                 frames.append(data)
                 # Check if the pause is long enough to stop.
-                silence_seconds = silence_chunks * CHUNK / RATE
-                if silence_seconds >= SILENCE_LIMIT_SECONDS:
+                silence_seconds = silence_chunks * chunk_size / rate
+                if silence_seconds >= silence_limit_seconds:
                     print("  [audio] Silence detected — stopping.")
                     break
             # If we haven't started yet, just discard silent chunks.
 
-    # ── Clean up ──────────────────────────────────────────────
-    stream.stop_stream()
-    stream.close()
-    p.terminate()
-
-    if not has_started:
-        print("  [audio] No speech detected.")
-        return None
-
-    # Combine all audio chunks into one big byte string.
-    audio_data = b"".join(frames)
-    duration = len(frames) * CHUNK / RATE
-    print(f"  [audio] Recorded {len(audio_data)} bytes ({duration:.1f}s)")
-
-    return audio_data
+    return frames
