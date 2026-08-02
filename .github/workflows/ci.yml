@@ -17,6 +17,13 @@ jobs:
         with:
           python-version: "3.11"
 
+      # pyaudio (in requirements.txt) compiles a C extension against
+      # PortAudio at install time — without this system library present,
+      # pip's build step fails with "portaudio.h: No such file or
+      # directory" before it ever gets to Python code.
+      - name: Install system audio library (required to build pyaudio)
+        run: sudo apt-get update && sudo apt-get install -y portaudio19-dev
+
       - name: Install dependencies
         run: |
           cd desktop
