@@ -87,6 +87,45 @@ object ClaudeService {
     // .trimIndent() removes the leading whitespace from every line of the raw string,
     // so the actual text doesn't have extra indentation when sent to the assistant.
 
+    // ── Shared HTTP clients (created once, reused for every call) ─
+    // WHAT: OkHttpClient is expensive to construct — each instance owns its own connection
+    // pool (a cache of open TCP/TLS connections kept warm for reuse), a dispatcher thread
+    // pool, and a DNS cache. HOW: because ClaudeService is a Kotlin "object" (singleton),
+    // these "by lazy" properties are built exactly once, the first time each is touched, and
+    // then reused for the lifetime of the app process — every call to processWithClaude() or
+    // processWithOllama() reuses the same client instead of building a new one. WHY: building
+    // a fresh OkHttpClient per request throws away that connection pool every time, so the
+    // next request has to renegotiate a new TCP connection (and TLS handshake, for HTTPS)
+    // from scratch instead of reusing a "keep-alive" connection already open to the same
+    // host — wasted latency and CPU/battery on every single request. Two separate clients are
+    // kept (rather than one shared one) because the two providers have deliberately different
+    // timeout profiles below.
+
+    // claudeClient: talks to Anthropic's cloud API over the internet.
+    private val claudeClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            // connectTimeout: how long to wait for the initial connection to the server.
+            .connectTimeout(30, TimeUnit.SECONDS)
+            // readTimeout: how long to wait for data once connected. Kept generous since
+            // Claude's response can take a while to generate for longer answers.
+            .readTimeout(30, TimeUnit.SECONDS)
+            // writeTimeout: how long to wait while sending our request body to the server.
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build()
+    }
+
+    // ollamaClient: talks to a local Ollama server on the same machine.
+    private val ollamaClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            // connectTimeout: short, because it's local — if Ollama isn't running, fail fast.
+            .connectTimeout(10, TimeUnit.SECONDS)
+            // readTimeout: generous, because local LLMs can be slow on CPU-only machines.
+            .readTimeout(60, TimeUnit.SECONDS)
+            // writeTimeout: matches connectTimeout — our request bodies are small local calls.
+            .writeTimeout(10, TimeUnit.SECONDS)
+            .build()
+    }
+
     // ── Main entry point: process user text with auto-fallback ──
     // "suspend" means this function is a coroutine — it can pause without blocking the UI thread.
     // It takes the user's speech text and an optional mode string ("auto", "online", or "offline").
@@ -137,14 +176,10 @@ object ClaudeService {
             // instead of crashing the app. This makes the app more robust.
             try {
                 // ── Build the API request ──────────────────────
-                // OkHttpClient.Builder() uses the Builder pattern — we chain method calls to configure the client.
-                val client = OkHttpClient.Builder()
-                    // connectTimeout: how long to wait (30 seconds) for the initial connection to the server.
-                    .connectTimeout(30, TimeUnit.SECONDS)
-                    // readTimeout: how long to wait (30 seconds) for data to arrive after connecting.
-                    .readTimeout(30, TimeUnit.SECONDS)
-                    // build() finalizes the configuration and creates the OkHttpClient object.
-                    .build()
+                // Reuse the shared claudeClient (built once, lazily, above) instead of
+                // constructing a new OkHttpClient here — see the comment on claudeClient
+                // for why a fresh client per call would be wasteful.
+                val client = claudeClient
 
                 // The URL for Claude's messages API endpoint (the address we send HTTP requests to).
                 val url = "https://api.anthropic.com/v1/messages"
@@ -238,16 +273,10 @@ object ClaudeService {
             // instead of crashing the app.
             try {
                 // ── Build the API request ──────────────────────
-                // OkHttpClient.Builder() creates a new HTTP client configuration.
-                val client = OkHttpClient.Builder()
-                    // connectTimeout: how long to wait (10 seconds) for the connection to the local Ollama server.
-                    // Short timeout because it's local — if Ollama isn't running, we want to fail fast.
-                    .connectTimeout(10, TimeUnit.SECONDS)
-                    // readTimeout: how long to wait (60 seconds) for Ollama to generate a response.
-                    // Local LLMs can be slow on CPU-only machines, so we give it a generous timeout.
-                    .readTimeout(60, TimeUnit.SECONDS)
-                    // build() finalizes the configuration and creates the OkHttpClient object.
-                    .build()
+                // Reuse the shared ollamaClient (built once, lazily, above) instead of
+                // constructing a new OkHttpClient here — see the comment on ollamaClient
+                // for why a fresh client per call would be wasteful.
+                val client = ollamaClient
 
                 // The URL for Ollama's generate API endpoint (local server, no internet needed).
                 val url = "http://localhost:11434/api/generate"
