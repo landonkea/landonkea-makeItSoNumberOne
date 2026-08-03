@@ -104,6 +104,38 @@ class ValidateConfigTests(unittest.TestCase):
         )
         self.assertEqual(len(errors), 2)
 
+    def test_valid_integrations_section_has_no_errors(self):
+        config = {
+            "integrations": {
+                "weather": {
+                    "provider": "openweathermap",
+                    "openweathermap_api_key": "abc123",
+                    "default_location": "Boston",
+                },
+                "calendar": {
+                    "ics_url": "https://example.com/cal.ics",
+                    "ics_username": "alice",
+                    "ics_password": "hunter2",
+                },
+                "reminders": {"todoist_api_token": "tok"},
+            }
+        }
+        self.assertEqual(make_it_so.validate_config(config), [])
+
+    def test_invalid_weather_provider_choice_is_reported(self):
+        errors = make_it_so.validate_config(
+            {"integrations": {"weather": {"provider": "carrier-pigeon"}}}
+        )
+        self.assertEqual(len(errors), 1)
+        self.assertIn("integrations.weather.provider", errors[0])
+
+    def test_wrong_type_in_integrations_section_reported_with_dotted_path(self):
+        errors = make_it_so.validate_config(
+            {"integrations": {"reminders": {"todoist_api_token": 12345}}}
+        )
+        self.assertEqual(len(errors), 1)
+        self.assertIn("integrations.reminders.todoist_api_token", errors[0])
+
 
 class ConversationHistoryPersistenceTests(unittest.TestCase):
     def setUp(self):

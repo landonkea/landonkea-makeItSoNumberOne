@@ -7,3 +7,4 @@
 
 from . import system
 from . import web_actions
+from . import integrations

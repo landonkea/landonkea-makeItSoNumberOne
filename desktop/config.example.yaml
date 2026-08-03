@@ -74,3 +74,33 @@ security:
   # anywhere. Leave empty/unset to use the built-in default:
   # .key, .pem
   denied_read_extensions: []
+
+# ── INTEGRATIONS (optional) ───────────────────────────────────────
+# Real weather / calendar / reminders providers. Every field below
+# is optional — leave a whole subsection out if you don't want that
+# feature; the assistant just replies with a clear "not configured"
+# message when asked for something it isn't set up to fetch.
+integrations:
+  weather:
+    # "open-meteo" is free and needs no API key (default). Switch to
+    # "openweathermap" if you'd rather use an OpenWeatherMap account
+    # you already have (get a key at https://openweathermap.org/api).
+    provider: "open-meteo"
+    openweathermap_api_key: ""
+    # Used when you ask for weather without naming a place, e.g.
+    # "Computer, what's the weather?"
+    default_location: ""
+
+  calendar:
+    # A .ics feed URL. Google Calendar, iCloud, Outlook and
+    # Nextcloud all offer a "secret address" / "public URL" .ics
+    # export for a calendar under its sharing settings.
+    ics_url: ""
+    # Only needed if the feed requires HTTP basic auth to fetch.
+    ics_username: ""
+    ics_password: ""
+
+  reminders:
+    # Todoist REST API token — create one at Todoist's website under
+    # Settings -> Integrations -> Developer.
+    todoist_api_token: ""

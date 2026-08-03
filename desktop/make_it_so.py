@@ -565,6 +565,21 @@ CONFIG_SCHEMA = {
         "denied_read_paths": {"type": list},
         "denied_read_extensions": {"type": list},
     }},
+    "integrations": {"type": dict, "schema": {
+        "weather": {"type": dict, "schema": {
+            "provider": {"type": str, "choices": ("open-meteo", "openweathermap")},
+            "openweathermap_api_key": {"type": str},
+            "default_location": {"type": str},
+        }},
+        "calendar": {"type": dict, "schema": {
+            "ics_url": {"type": str},
+            "ics_username": {"type": str},
+            "ics_password": {"type": str},
+        }},
+        "reminders": {"type": dict, "schema": {
+            "todoist_api_token": {"type": str},
+        }},
+    }},
 }
 
 

@@ -42,6 +42,25 @@ Desktop additionally supports a fully **offline** mode: Ollama (a local LLM) in 
 Claude, and Vosk in place of Whisper, so the assistant can run with no API keys and no
 internet connection.
 
+### Weather / calendar / reminders (desktop)
+
+Desktop can answer real weather questions, read a calendar feed, and manage reminders —
+`desktop/core/actions/integrations.py`. Each is opt-in via `config.yaml`'s `integrations:`
+section (see `config.example.yaml`); nothing here is required for the assistant to work.
+
+- **Weather** — [Open-Meteo](https://open-meteo.com/) by default (free, no API key), or
+  [OpenWeatherMap](https://openweathermap.org/api) if you set `integrations.weather.provider`
+  to `openweathermap` and supply your own key.
+- **Calendar** — any `.ics` feed URL (Google/iCloud/Outlook/Nextcloud all offer one under
+  their calendar-sharing settings), with optional HTTP basic auth for private feeds. Parsed
+  with a small built-in RFC 5545 reader — no extra dependency.
+- **Reminders** — [Todoist](https://todoist.com/)'s REST API, via a personal API token: add,
+  list, and complete reminders by saying what they're about (no need to remember an ID).
+
+This is desktop-only: new action types reach the model via a JSON-format addendum that only
+desktop's system prompt gets (see `core/ai.py`) — Android/iOS parse the shared
+`RESPONSE:`/`ACTIONS:` text format and have no equivalent extension point yet.
+
 ## Platform setup
 
 ### Desktop (Python)

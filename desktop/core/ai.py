@@ -56,13 +56,34 @@ Rules:
 - Output must be valid JSON — a machine parses it with json.loads(),
   not a human, so it must parse on the first try.
 
-This desktop client also supports ONE additional action type not
-listed above: "sleep_mode" (params: duration_seconds, optional —
-defaults to 300 if omitted). Use it when the user asks you to stop
-listening for a while — e.g. "Computer, stop listening", "go to
-sleep", "mute yourself", "leave me alone for 10 minutes". Respond
-with the sleep_mode action AND a short spoken acknowledgement in
-"response" (e.g. "Entering sleep mode.").
+This desktop client also supports SIX additional action types not
+listed above:
+
+- "sleep_mode" (params: duration_seconds, optional — defaults to 300
+  if omitted). Use it when the user asks you to stop listening for a
+  while — e.g. "Computer, stop listening", "go to sleep", "mute
+  yourself", "leave me alone for 10 minutes". Respond with the
+  sleep_mode action AND a short spoken acknowledgement in "response"
+  (e.g. "Entering sleep mode.").
+- "get_weather" (params: location, optional — uses the user's
+  configured default location if omitted). Use it when the user asks
+  about current weather conditions anywhere.
+- "get_calendar_events" (params: days, optional int — defaults to 7).
+  Use it when the user asks what's on their calendar / schedule /
+  upcoming events.
+- "add_reminder" (params: text — what to be reminded of). Use it when
+  the user asks you to remind them of something or add a to-do.
+- "list_reminders" (no params). Use it when the user asks what their
+  reminders/to-dos are.
+- "complete_reminder" (params: query — text that identifies which
+  reminder, e.g. the words the user used to describe it). Use it when
+  the user says a reminder is done / to check it off / to complete it.
+
+Each of these returns its result as plain text that you should relay
+back to the user conversationally in a FUTURE turn (once you see the
+action's result in the conversation) — for the turn where you ISSUE
+the action itself, just acknowledge briefly in "response" (e.g. "Let
+me check.", "One moment.", "Adding that now.").
 """
 
 

@@ -159,6 +159,40 @@ def execute_action(action_dict, config):
             int(params.get("y", 0))
         )
 
+    # Otherwise, check if the action is "get_weather" (real weather
+    # lookup via Open-Meteo or OpenWeatherMap — see actions/
+    # integrations.py for provider/credential handling).
+    elif action_type == "get_weather":
+        return actions.integrations.get_weather(
+            params.get("location", ""), config
+        )
+
+    # Otherwise, check if the action is "get_calendar_events" (reads
+    # a configured .ics calendar feed — see actions/integrations.py).
+    elif action_type == "get_calendar_events":
+        return actions.integrations.get_calendar_events(
+            config, int(params.get("days", 7))
+        )
+
+    # Otherwise, check if the action is "add_reminder" (creates a
+    # Todoist task — see actions/integrations.py).
+    elif action_type == "add_reminder":
+        return actions.integrations.add_reminder(
+            params.get("text", ""), config
+        )
+
+    # Otherwise, check if the action is "list_reminders" (lists open
+    # Todoist tasks — see actions/integrations.py). No params.
+    elif action_type == "list_reminders":
+        return actions.integrations.list_reminders(config)
+
+    # Otherwise, check if the action is "complete_reminder" (marks a
+    # matching Todoist task done — see actions/integrations.py).
+    elif action_type == "complete_reminder":
+        return actions.integrations.complete_reminder(
+            params.get("query", ""), config
+        )
+
     # If none of the above action types matched, we don't know
     # what this action is. This is the "catch-all" else block.
     else:
