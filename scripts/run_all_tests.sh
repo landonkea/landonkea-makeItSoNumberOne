@@ -40,7 +40,18 @@ IOS_STATUS="?"; IOS_SUMMARY="not run"; IOS_FAILURES=""
 run_desktop() {
   echo "==> Running desktop tests"
   local log="$RAW_DIR/desktop.log"
-  ( cd "$REPO_ROOT" && python3 -m unittest discover -s desktop/tests -v ) > "$log" 2>&1
+  # Prefer desktop/.venv's interpreter when it exists: desktop's
+  # requirements.txt (pyyaml, etc.) is installed there, and running
+  # discovery against a bare system python3 that lacks those deps
+  # produces spurious test failures (e.g. routines.py silently
+  # degrading to "no routines loaded" when `import yaml` fails) that
+  # look like real regressions but are just a missing-dependency
+  # false alarm.
+  local desktop_python="$REPO_ROOT/desktop/.venv/bin/python3"
+  if [ ! -x "$desktop_python" ]; then
+    desktop_python="python3"
+  fi
+  ( cd "$REPO_ROOT" && "$desktop_python" -m unittest discover -s desktop/tests -v ) > "$log" 2>&1
   local exit_code=$?
 
   local ran_line
