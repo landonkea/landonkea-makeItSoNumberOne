@@ -21,6 +21,10 @@ desktop/build/
 desktop/config.yaml
 **/config.yaml
 
+# ── Conversation history (local runtime state, may contain
+# whatever the user has said to the assistant — never commit) ──
+desktop/conversation_history.json
+
 # ── Android ────────────────────────────────────────────────────
 *.iml
 .gradle/

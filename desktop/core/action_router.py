@@ -130,6 +130,15 @@ def execute_action(action_dict, config):
     elif action_type == "confirm_command":
         return actions.system.confirm_pending_command()
 
+    # Otherwise, check if the action is "sleep_mode" (mute/"stop
+    # listening" — see actions/system.py's enter_sleep_mode() for
+    # what actually happens; make_it_so.py's _listen_for_wake_word()
+    # is what skips re-arming the wake-word listener while muted).
+    elif action_type == "sleep_mode":
+        return actions.system.enter_sleep_mode(
+            params.get("duration_seconds", actions.system.DEFAULT_MUTE_SECONDS)
+        )
+
     # Otherwise, check if the action is "scroll" (scroll up/down).
     elif action_type == "scroll":
         # Call the scroll function with direction (up/down) and

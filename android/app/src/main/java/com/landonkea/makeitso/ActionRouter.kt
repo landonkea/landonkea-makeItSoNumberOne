@@ -9,8 +9,9 @@
 //   - search_web: Search the internet
 //   - send_sms: Send a text message
 //   - make_call: Make a phone call
-//   - set_alarm: Set an alarm
-// 
+//   - set_alarm: Set an alarm (params: hour, minute, message — all optional;
+//     with no params, opens the clock app's "set alarm" screen)
+//
 // Full system control (like typing, clicking, scrolling) is not
 // possible on Android without root access.
 // ───────────────────────────────────────────────────────────────────
@@ -27,6 +28,10 @@ import android.content.Context
 import android.content.Intent
 // Uri represents a Uniform Resource Identifier — it can be a web URL (https://...), phone number (tel:...), etc.
 import android.net.Uri
+// AlarmClock provides the well-known Intent actions/extras for asking the device's default
+// clock/alarm app to set an alarm, without us needing our own alarm-scheduling code or the
+// SET_ALARM permission (ACTION_SET_ALARM is a "broadcast intent" any app can send).
+import android.provider.AlarmClock
 
 // "object" creates a singleton — exactly one ActionRouter instance exists for the entire app.
 // It acts as a utility that takes an Action object and performs the corresponding Android operation.
@@ -47,6 +52,7 @@ object ActionRouter {
             "open_app" -> executeOpenApp(context, action.params)
             "send_sms" -> executeSendSms(context, action.params)
             "make_call" -> executeMakeCall(context, action.params)
+            "set_alarm" -> executeSetAlarm(context, action.params)
 
             // ── Unknown action type ───────────────────────────
             // If Claude returns an action type we don't recognize, log it for debugging.
@@ -133,5 +139,40 @@ object ActionRouter {
         context?.startActivity(intent)
     }
     // End of executeMakeCall().
+
+    // ── Set an alarm ───────────────────────────────────────────
+    // If Claude says action type is "set_alarm", ask the device's default clock app to set
+    // one via the standard AlarmClock.ACTION_SET_ALARM broadcast intent. This does NOT require
+    // the SET_ALARM permission in the manifest (any app is allowed to send this intent — it's
+    // the clock app itself, not us, that actually schedules the alarm), and it hands the user
+    // a normal system alarm-confirmation UI rather than silently scheduling something in the
+    // background.
+    private fun executeSetAlarm(context: Context?, params: Map<String, String>) {
+        // "hour" and "minute" are optional — if Claude doesn't supply them (or supplies a
+        // non-numeric value), toIntOrNull() returns null and we fall through to just opening
+        // the clock app's own "set alarm" screen instead of crashing on a bad params map.
+        val hour = params["hour"]?.toIntOrNull()
+        val minute = params["minute"]?.toIntOrNull()
+        // Optional label shown on the alarm, e.g. "Wake up".
+        val message = params["message"] ?: ""
+
+        val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
+            if (hour != null) putExtra(AlarmClock.EXTRA_HOUR, hour)
+            if (minute != null) putExtra(AlarmClock.EXTRA_MINUTES, minute)
+            if (message.isNotEmpty()) putExtra(AlarmClock.EXTRA_MESSAGE, message)
+            // SKIP_UI lets the alarm be created without the clock app popping up a
+            // confirmation screen first — but only when we actually have a time to set;
+            // with no hour/minute at all we WANT the UI so the user can pick a time.
+            if (hour != null) putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        // Only launch if some app on the device can actually handle ACTION_SET_ALARM
+        // (resolveActivity returns null otherwise) — avoids a crash on a device/emulator
+        // with no clock app installed.
+        if (context?.packageManager?.let { intent.resolveActivity(it) } != null) {
+            context.startActivity(intent)
+        }
+    }
+    // End of executeSetAlarm().
 }
 // End of ActionRouter object.

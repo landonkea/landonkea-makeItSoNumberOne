@@ -12,11 +12,11 @@ import json
 # Import `os` to build file paths that work on any operating system
 # (used below to locate the shared system prompt file).
 import os
-# Import `re`, Python's regular expression module. A "regular
-# expression" (regex) is a mini pattern-language for finding and
-# extracting text that matches a shape — e.g. "everything after the
-# word RESPONSE: up until the word ACTIONS:". We use it below to pull
-# the two sections out of the AI's reply.
+# Import `re`, Python's regular expression module. Only used now as
+# a LEGACY fallback parser — see _parse_response_legacy() below — for
+# the old hand-rolled "RESPONSE: ... ACTIONS: ..." text format, in
+# case a model ever ignores the JSON instruction in the system
+# prompt and replies in the old shape anyway.
 import re
 
 
@@ -24,9 +24,54 @@ import re
 # This is the same across ALL platforms and ALL modes.
 # Tells the AI to act like the Enterprise computer and respond in
 # the structured format (RESPONSE: ... ACTIONS: ...).
+# ── JSON output format override ───────────────────────────────────
+# shared/prompts/system_prompt.txt is loaded (unmodified) by ALL
+# THREE platforms — desktop, Android's ClaudeService.kt, and iOS's
+# ClaudeService.swift, which bundles the same file as a resource and
+# falls back to an inline copy of the same RESPONSE:/ACTIONS: text
+# format if the bundled copy is missing. That means we can't change
+# the shared file's output-format instructions here without also
+# updating both mobile parsers in lockstep — out of scope for this
+# pass (see the desktop-only decision explained in the project
+# notes). Instead, desktop appends this addendum to the shared
+# prompt, which explicitly tells the model to IGNORE the shared
+# file's RESPONSE:/ACTIONS: text format and reply with strict JSON
+# instead. Only desktop's own _parse_response() below expects that
+# JSON shape, so Android/iOS (which never see this addendum) are
+# completely unaffected.
+_JSON_FORMAT_ADDENDUM = """
+
+IMPORTANT — OUTPUT FORMAT OVERRIDE FOR THIS CLIENT:
+Ignore the "RESPONSE:" / "ACTIONS:" text format described above.
+Instead, reply with ONLY a single JSON object, no markdown code
+fences, no commentary before or after it, in exactly this shape:
+
+{"response": "<what you say out loud, 1-3 sentences>", "actions": [{"action": "<action_type>", "params": {"<key>": "<value>"}}]}
+
+Rules:
+- "response" is always a string (use "" if you have nothing to say).
+- "actions" is always an array (use [] if no actions are needed).
+- Every array entry needs both "action" (a string) and "params" (an
+  object, possibly empty: {}).
+- Output must be valid JSON — a machine parses it with json.loads(),
+  not a human, so it must parse on the first try.
+
+This desktop client also supports ONE additional action type not
+listed above: "sleep_mode" (params: duration_seconds, optional —
+defaults to 300 if omitted). Use it when the user asks you to stop
+listening for a while — e.g. "Computer, stop listening", "go to
+sleep", "mute yourself", "leave me alone for 10 minutes". Respond
+with the sleep_mode action AND a short spoken acknowledgement in
+"response" (e.g. "Entering sleep mode.").
+"""
+
+
 def get_system_prompt():
     """
-    Load the Star Trek computer system prompt from the shared file.
+    Load the Star Trek computer system prompt from the shared file,
+    with the JSON output-format addendum appended (see
+    _JSON_FORMAT_ADDENDUM above for why the addendum lives here
+    instead of in the shared file itself).
     """
     # Build the absolute path to shared/prompts/system_prompt.txt.
     # `__file__` is this script's own path. Each `os.path.dirname()`
@@ -42,17 +87,14 @@ def get_system_prompt():
     )
     try:
         with open(prompt_path, "r") as f:
-            return f.read()
+            base_prompt = f.read()
     except FileNotFoundError:
         # If the shared prompt file is missing (e.g. a stripped-down
         # deployment that only ships the desktop/ folder), fall back
         # to a minimal built-in prompt so the assistant still works,
         # just without its full Star Trek personality.
-        return (
-            "You are the computer from the USS Enterprise. "
-            "Respond helpfully and concisely. "
-            "Format: RESPONSE: ... ACTIONS: ..."
-        )
+        base_prompt = "You are the computer from the USS Enterprise."
+    return base_prompt + _JSON_FORMAT_ADDENDUM
 
 
 # ── process_with_ai() — Main entry point (used by make_it_so.py) ──
@@ -353,24 +395,116 @@ def _build_ollama_prompt(user_text, conversation_history):
 
 # ── _parse_response() — Extracts spoken text + actions ───────────
 # Shared by both online and offline modes.
-# Claude and Ollama both respond in the same format:
-#   RESPONSE: <spoken text>
-#   ACTIONS:
-#   - action: open_app
-#     params:
-#       name: Safari
+#
+# The system prompt (see _JSON_FORMAT_ADDENDUM above) instructs the
+# model to reply with a single strict JSON object:
+#   {"response": "<spoken text>",
+#    "actions": [{"action": "open_app", "params": {"name": "Safari"}}]}
+#
+# We parse that with json.loads() — no hand-rolled pattern matching,
+# no ambiguity about where one field ends and the next begins. This
+# also structurally fixes the whole CLASS of bug the old regex parser
+# had (see git history: the first action in a list could be silently
+# dropped because of an off-by-one in the "- action:" splitting
+# regex) — a JSON array has no such "first item is different from the
+# rest" edge case to get wrong.
+#
+# _parse_response_legacy() below is kept ONLY as a fallback for the
+# rare case a model ignores the JSON instruction and replies in the
+# old "RESPONSE: ... ACTIONS: ..." text shape anyway (this can happen
+# with small/local Ollama models that don't follow instructions as
+# reliably as Claude does) — better to still get a usable reply than
+# to return nothing.
 def _parse_response(full_text):
     """
     Split the AI's raw reply into the spoken-aloud text and the list
     of structured actions to run.
 
-    HOW IT WORKS
-    ------------
-    Both Claude and Ollama are instructed (via the system prompt) to
-    reply in a fixed text layout with two labeled sections. We use
-    regular expressions — a pattern-matching mini-language for text —
-    to pull each section out, then hand the ACTIONS section to
-    `_parse_actions()` for further parsing.
+    Tries strict JSON first (the format the system prompt asks for).
+    Falls back to the legacy "RESPONSE:/ACTIONS:" text parser only if
+    the reply isn't valid JSON in the expected shape.
+    """
+    parsed = _parse_response_json(full_text)
+    if parsed is not None:
+        return parsed
+    print("  [ai] Reply wasn't valid JSON — falling back to legacy "
+          "RESPONSE:/ACTIONS: text parser.")
+    return _parse_response_legacy(full_text)
+
+
+def _strip_markdown_code_fence(text):
+    """
+    Strip a surrounding ```json ... ``` or ``` ... ``` code fence, if
+    present, so json.loads() can parse the content inside it.
+
+    Some models wrap JSON output in a markdown fence out of habit
+    even when told not to — this is a cheap, safe thing to tolerate
+    before giving up and falling back to the legacy parser.
+    """
+    text = text.strip()
+    if not text.startswith("```"):
+        return text
+    # Drop the opening fence line (```json or just ```).
+    text = text.split("\n", 1)[1] if "\n" in text else ""
+    # Drop a trailing fence line, if present.
+    if text.rstrip().endswith("```"):
+        text = text.rstrip()[:-3]
+    return text.strip()
+
+
+def _parse_response_json(full_text):
+    """
+    Try to parse `full_text` as the strict JSON shape the system
+    prompt asks for: {"response": str, "actions": [{"action": str,
+    "params": dict}, ...]}.
+
+    Returns the parsed {"spoken_text", "actions"} dict on success, or
+    None if `full_text` isn't valid JSON in that shape (letting the
+    caller fall back to the legacy text parser instead of crashing).
+    """
+    candidate = _strip_markdown_code_fence(full_text)
+    try:
+        data = json.loads(candidate)
+    except json.JSONDecodeError:
+        return None
+
+    # A bare JSON string/number/list (technically valid JSON, but not
+    # the object shape we asked for) isn't usable either.
+    if not isinstance(data, dict):
+        return None
+
+    spoken_text = data.get("response", "")
+    if not isinstance(spoken_text, str):
+        spoken_text = str(spoken_text)
+
+    raw_actions = data.get("actions", [])
+    actions = []
+    if isinstance(raw_actions, list):
+        for entry in raw_actions:
+            # Skip any array entry that isn't itself an object, or
+            # has no "action" name — malformed individual actions
+            # shouldn't take down the whole response.
+            if not isinstance(entry, dict):
+                continue
+            action_name = entry.get("action")
+            if not action_name:
+                continue
+            params = entry.get("params", {})
+            if not isinstance(params, dict):
+                params = {}
+            actions.append({"action": action_name, "params": params})
+
+    return {"spoken_text": spoken_text.strip(), "actions": actions}
+
+
+# ── _parse_response_legacy() — old YAML-like text format ─────────
+# Kept only as a fallback — see _parse_response()'s docstring above.
+def _parse_response_legacy(full_text):
+    """
+    Split the AI's raw reply into the spoken-aloud text and the list
+    of structured actions to run, using the OLD "RESPONSE: ...
+    ACTIONS: ..." text layout. Only used when _parse_response_json()
+    couldn't parse the reply as JSON.
     """
     spoken_text = ""
     actions = []
@@ -390,20 +524,18 @@ def _parse_response(full_text):
         full_text, re.DOTALL
     )
     if response_match:
-        # `.group(1)` returns just the parenthesized "capture group"
-        # from the pattern above (the spoken text itself), not the
-        # literal "RESPONSE:" label that matched alongside it.
         spoken_text = response_match.group(1).strip()
 
     # Everything after "ACTIONS:" to the end of the text is the
-    # actions block, which _parse_actions() will break down further.
+    # actions block, which _parse_actions_legacy() breaks down
+    # further.
     actions_match = re.search(
         r"ACTIONS:\s*(.+)",
         full_text, re.DOTALL
     )
     if actions_match:
         actions_text = actions_match.group(1).strip()
-        actions = _parse_actions(actions_text)
+        actions = _parse_actions_legacy(actions_text)
 
     return {
         "spoken_text": spoken_text,
@@ -411,53 +543,30 @@ def _parse_response(full_text):
     }
 
 
-# ── _parse_actions() — Parses the YAML-like action blocks ────────
-def _parse_actions(actions_text):
+def _parse_actions_legacy(actions_text):
     """
-    Parse the ACTIONS section's YAML-like list into a list of dicts
-    like {"action": "open_app", "params": {"name": "Safari"}}.
-
-    The AI doesn't return real machine-readable JSON here — it
-    returns YAML-flavored text because that's easier for a language
-    model to produce reliably. Rather than pulling in a full YAML
-    parser for this one narrow shape, we split the text ourselves
-    with a regular expression.
+    Parse the legacy ACTIONS section's YAML-like list into a list of
+    dicts like {"action": "open_app", "params": {"name": "Safari"}}.
     """
     actions = []
     # Split the whole ACTIONS block wherever a new "- action:" line
-    # begins. `re.split()` with a capturing-free pattern here removes
-    # the matched separator text from the result, leaving each
-    # action's own name + params text as one chunk in the resulting
-    # list.
-    #
-    # BUG FIX: the pattern used to be `r"\n\s*-\s+action:"`, which
-    # only matched a "- action:" marker that has a newline BEFORE
-    # it. That's true for the second action onward, but the very
-    # FIRST "- action:" in the text has nothing before it (no
-    # preceding newline to match), so it was never split off — the
-    # first action's name ended up being the literal string
-    # "- action: open_app" instead of just "open_app", which meant
-    # the first action Claude/Ollama requested each turn could never
-    # match a handler in action_router.py and was silently dropped
-    # as an "Unknown action type." Adding `(?:\A|\n)` — "the very
-    # start of the string, OR a newline" — makes the very first
-    # occurrence match too, so every action (including the first)
-    # gets its "- action:" marker stripped consistently. `\A` means
-    # "start of string" (unlike `^`, it isn't affected by
-    # re.MULTILINE, though we don't use that flag here anyway).
+    # begins. `(?:\A|\n)` — "the very start of the string, OR a
+    # newline" — makes sure the very FIRST "- action:" splits off
+    # too, not just later ones (a bug that used to silently drop the
+    # first action of every response — see git history).
     action_blocks = re.split(r"(?:\A|\n)\s*-\s+action:", actions_text)
 
     for block in action_blocks:
-        action = _parse_one_action_block(block)
+        action = _parse_one_action_block_legacy(block)
         if action is not None:
             actions.append(action)
 
     return actions
 
 
-def _parse_one_action_block(block):
+def _parse_one_action_block_legacy(block):
     """
-    Parse a single action's text chunk (action name + optional
+    Parse a single legacy action's text chunk (action name + optional
     "params:" section) into {"action": ..., "params": {...}}.
 
     Returns None for an empty chunk (e.g. the leading fragment
@@ -467,23 +576,13 @@ def _parse_one_action_block(block):
     if not block:
         return None
 
-    # The action name is whatever's on the first line of this chunk
-    # (re.split already stripped the "- action:" label itself off
-    # the front, so what's left starts with the action's name, e.g.
-    # "open_app").
     lines = block.split("\n")
     action_name = lines[0].strip()
 
     params = {}
-    # Look for a "params:" section anywhere in the remaining text and
-    # capture everything after it.
     params_match = re.search(r"params:\s*(.+)", block, re.DOTALL)
     if params_match:
         params_text = params_match.group(1).strip()
-        # Each param line looks like "name: Safari" — split on the
-        # FIRST colon only (`split(":", 1)`) so a value that itself
-        # contains a colon (e.g. a URL like "http://example.com")
-        # doesn't get chopped up incorrectly.
         for line in params_text.split("\n"):
             line = line.strip()
             if ":" in line:

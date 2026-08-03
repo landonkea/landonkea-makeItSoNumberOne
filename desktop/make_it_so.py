@@ -52,6 +52,20 @@ import sys
 # We use it to pause (sleep) before restarting after an error.
 import time
 
+# Import `json` to persist conversation history to disk between runs
+# (see save_conversation_history() / load_conversation_history()
+# below) — history was previously in-memory only and lost every
+# restart.
+import json
+
+# ── Conversation history persistence ──────────────────────────────
+# Path to the file we save conversation history to after each
+# exchange, and reload from on startup. Lives next to config.yaml in
+# the desktop/ folder (main() already os.chdir()s here first), kept
+# out of git the same way config.yaml is (see .gitignore) since it's
+# local runtime state, not source code.
+HISTORY_FILE = "conversation_history.json"
+
 
 # Define the main function that runs everything.
 # When you run this file, Python calls this function at the bottom.
@@ -95,9 +109,10 @@ def main():
     # Claude remembers previous exchanges so you can have a
     # natural conversation (like "Open Safari" then "Search for
     # pizza places" — it knows the context).
-    # Create an empty list that will store all the messages exchanged
-    # with Claude. Each message is a dict with "role" and "content".
-    conversation_history = []
+    # Load whatever history was saved from the last run (see
+    # save_conversation_history() below) so context survives a
+    # restart, instead of always starting from an empty list.
+    conversation_history = load_conversation_history()
 
     # ── MAIN LOOP ────────────────────────────────────────────────
     # This loop runs forever, processing one command at a time.
@@ -137,6 +152,12 @@ def main():
                 # the 20th-from-last item to the end." This prevents
                 # the list from growing forever and using too much memory.
                 conversation_history = conversation_history[-20:]
+
+            # Persist history to disk after every cycle (not just on
+            # a clean shutdown) so a crash, force-quit, or power loss
+            # between cycles doesn't lose the conversation the same
+            # way an in-memory-only list would.
+            save_conversation_history(conversation_history)
 
         # If the user presses Ctrl+C, Python raises a KeyboardInterrupt.
         # This catches it so we can print a goodbye message instead of
@@ -241,6 +262,25 @@ def _listen_for_wake_word(config):
     # one of this module's optional dependencies only fails when
     # this specific feature is actually used, not at startup.
     from core import wake_word
+    from core.actions import system
+
+    # ── Honor an active sleep_mode (see core/actions/system.py) ──
+    # If the user recently said "Computer, stop listening", skip
+    # arming the wake-word mic listener entirely until the mute
+    # window passes — this is the whole point of sleep_mode: actually
+    # not listening, not just ignoring what's heard. We sleep for the
+    # remaining duration in one shot (KeyboardInterrupt still breaks
+    # out of a plain time.sleep() the same way it would break out of
+    # wake_word.wait_for_wake_word(), so Ctrl+C keeps working during a
+    # mute window too) rather than looping in small increments, since
+    # there's nothing else this thread needs to be responsive to
+    # while muted.
+    if system.is_muted():
+        remaining = system.mute_seconds_remaining()
+        print(f"  [main] Sleep mode active — muted for "
+              f"{int(remaining)} more second(s).")
+        time.sleep(remaining)
+        print("  [main] Sleep mode ended.")
 
     print()
     print("  ╔══════════════════════════════════════════════════╗")
@@ -396,6 +436,180 @@ def _handle_action_results(action_results, conversation_history):
             tts.speak(result)
 
 
+def load_conversation_history():
+    """
+    Load conversation history saved by a previous run, if any.
+
+    RETURNS
+    -------
+    list of dict
+        The saved {"role", "content"} exchanges, or an empty list if
+        there's no history file yet, it's unreadable, or its content
+        isn't the list shape we expect (any of these just means
+        "start fresh" rather than a fatal error — history is a nice-
+        to-have, not something worth crashing startup over).
+    """
+    if not os.path.exists(HISTORY_FILE):
+        return []
+    try:
+        with open(HISTORY_FILE, "r") as f:
+            history = json.load(f)
+        if not isinstance(history, list):
+            print(f"  [main] {HISTORY_FILE} did not contain a list — "
+                  f"starting with empty history.")
+            return []
+        print(f"  [main] Loaded {len(history)} prior message(s) from "
+              f"{HISTORY_FILE}")
+        return history
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"  [main] Could not read {HISTORY_FILE} ({e}) — "
+              f"starting with empty history.")
+        return []
+
+
+def save_conversation_history(conversation_history):
+    """
+    Write conversation history to disk so it survives a restart.
+
+    Called after every conversation cycle (not just on shutdown) so
+    a crash or force-quit doesn't lose everything since the last
+    clean exit. Failures here are logged, not raised — losing the
+    ability to persist history should never crash the assistant
+    mid-conversation.
+    """
+    try:
+        with open(HISTORY_FILE, "w") as f:
+            json.dump(conversation_history, f, indent=2)
+    except OSError as e:
+        print(f"  [main] Could not save conversation history: {e}")
+
+
+# ── Config schema ──────────────────────────────────────────────────
+# Describes the TYPE (and, where relevant, allowed values) each
+# config.yaml key is expected to have, IF it's present at all — no
+# key here is strictly mandatory (every consumer already falls back
+# sanely via .get() when a key is missing entirely, e.g. an empty
+# API key just means "that provider is unavailable"). What this
+# schema catches is a key that's present but WRONG-TYPED (e.g.
+# `rate: "two hundred"` instead of `rate: 200`), which previously
+# would silently pass load_config() and only blow up later, deep
+# inside whichever module first tried to use it — often with a
+# confusing error that doesn't obviously point back to config.yaml.
+# Nested dicts (tts, settings, security) get their own sub-schema
+# under "schema", checked recursively by validate_config() below.
+CONFIG_SCHEMA = {
+    "mode": {"type": str, "choices": ("auto", "online", "offline")},
+    "anthropic_api_key": {"type": str},
+    "openai_api_key": {"type": str},
+    "porcupine_access_key": {"type": str},
+    "ollama_model": {"type": str},
+    "tts": {"type": dict, "schema": {
+        "voice": {"type": str},
+        "rate": {"type": int},
+    }},
+    "settings": {"type": dict, "schema": {
+        "max_record_seconds": {"type": (int, float)},
+        "silence_timeout": {"type": (int, float)},
+        "max_history": {"type": int},
+    }},
+    "security": {"type": dict, "schema": {
+        "allowed_commands": {"type": list},
+        "command_confirmation_required": {"type": bool},
+        "denied_read_paths": {"type": list},
+        "denied_read_extensions": {"type": list},
+    }},
+}
+
+
+def _type_name(expected_type):
+    """Human-readable name for a validate_config() 'type' entry,
+    which is either a single type (e.g. `str`) or a tuple of
+    acceptable types (e.g. `(int, float)`)."""
+    if isinstance(expected_type, tuple):
+        return "/".join(t.__name__ for t in expected_type)
+    return expected_type.__name__
+
+
+def validate_config(config, schema=None, path_prefix=""):
+    """
+    Check `config` against CONFIG_SCHEMA and return a list of
+    human-readable error strings, one per problem found — each one
+    names the EXACT key (dotted path, e.g. "settings.max_history")
+    that's missing its expected type or holds an invalid value, so a
+    malformed config.yaml can be fixed without guessing which line
+    is wrong.
+
+    Every schema key is OPTIONAL — this only flags keys that ARE
+    present but wrong-typed or hold an unrecognized value (e.g. a
+    "mode" that isn't "auto"/"online"/"offline"), not keys that are
+    simply absent.
+
+    RETURNS
+    -------
+    list of str
+        Empty list if `config` is valid (or empty).
+    """
+    if schema is None:
+        schema = CONFIG_SCHEMA
+
+    if not isinstance(config, dict):
+        return [f"'{path_prefix or 'config.yaml'}' should be a mapping "
+                f"(key: value pairs), got {type(config).__name__}"]
+
+    errors = []
+    for key, rule in schema.items():
+        if key not in config:
+            continue  # absent is fine — nothing here is mandatory.
+        value = config[key]
+        full_key = f"{path_prefix}{key}"
+        expected_type = rule["type"]
+
+        # isinstance(True, int) is True in Python, which would let a
+        # boolean silently pass an `int`-typed field (e.g. "rate:
+        # true") — explicitly reject that unless bool actually IS the
+        # expected type.
+        type_ok = isinstance(value, expected_type) and not (
+            isinstance(value, bool) and expected_type is not bool
+        )
+        if not type_ok:
+            errors.append(
+                f"'{full_key}' should be {_type_name(expected_type)}, "
+                f"got {type(value).__name__} ({value!r})"
+            )
+            continue
+
+        choices = rule.get("choices")
+        if choices and value not in choices:
+            errors.append(
+                f"'{full_key}' must be one of {choices}, got {value!r}"
+            )
+
+        nested_schema = rule.get("schema")
+        if nested_schema:
+            errors.extend(validate_config(
+                value, nested_schema, path_prefix=f"{full_key}."
+            ))
+
+    return errors
+
+
+def _print_config_validation_errors(errors):
+    """Print each config.yaml schema problem on its own line, in a
+    banner so it's hard to miss among the rest of startup's output."""
+    print()
+    print("  ╔══════════════════════════════════════════════════╗")
+    print("  ║  config.yaml has invalid value(s):              ║")
+    print("  ║                                                ║")
+    for error in errors:
+        print(f"  ║  - {error}")
+    print("  ║                                                ║")
+    print("  ║  Fix the value(s) above, or remove the key to  ║")
+    print("  ║  use its default. Continuing with config.yaml  ║")
+    print("  ║  as-is otherwise.                              ║")
+    print("  ╚══════════════════════════════════════════════════╝")
+    print()
+
+
 # Define a function that loads configuration from a YAML file.
 # YAML is a human-readable data format that uses indentation
 # (like Python) to organize data into lists and dictionaries.
@@ -407,7 +621,10 @@ def load_config():
     -------
     dict
         Configuration dictionary with API keys and settings.
-        Returns an empty dict if config.yaml doesn't exist.
+        Returns an empty dict if config.yaml doesn't exist OR if it
+        exists but isn't valid YAML at all (a syntax error) — in
+        both cases we print exactly what's wrong and let startup
+        continue with defaults rather than crashing outright.
 
     CONFIG FILE
     -----------
@@ -416,6 +633,11 @@ def load_config():
         anthropic_api_key: "sk-ant-..."
         openai_api_key: "sk-..."
         porcupine_access_key: "your-key-..."
+
+    Every key it contains that IS present is checked against
+    CONFIG_SCHEMA above — a wrong-typed value (e.g. `rate: "fast"`
+    instead of a number) is reported by name, not just discovered
+    later as a mysterious crash somewhere else in the app.
     """
     # Import the `yaml` module (from the PyYAML library) that can
     # read and write YAML files. This is a third-party library that
@@ -436,11 +658,37 @@ def load_config():
             # Parse the YAML file content into a Python dictionary.
             # `yaml.safe_load(f)` reads the file and converts it from
             # YAML text into Python data structures (dicts, lists, etc.).
+            # This can raise yaml.YAMLError on a genuine syntax error
+            # (mismatched indentation, an unterminated quote, etc.) —
+            # caught below so a typo in config.yaml can't crash the
+            # whole program before it even gets to print a banner.
+            try:
+                config = yaml.safe_load(f)
+            except yaml.YAMLError as e:
+                print()
+                print("  ╔══════════════════════════════════════════════════╗")
+                print("  ║  config.yaml is not valid YAML!                 ║")
+                print("  ║                                                ║")
+                for line in str(e).splitlines():
+                    print(f"  ║  {line}")
+                print("  ║                                                ║")
+                print("  ║  Fix the syntax error above, or check it       ║")
+                print("  ║  against config.example.yaml.                  ║")
+                print("  ╚══════════════════════════════════════════════════╝")
+                print()
+                return {}
             # `or {}` means if the file is empty (returns None), use an
             # empty dictionary instead.
-            config = yaml.safe_load(f) or {}
+            config = config or {}
             # Print a message confirming which config file was loaded.
             print(f"  [main] Loaded config from {config_path}")
+
+            # Schema check — report any wrong-typed/invalid value by
+            # its exact dotted key name (see CONFIG_SCHEMA above).
+            errors = validate_config(config)
+            if errors:
+                _print_config_validation_errors(errors)
+
             # Return the parsed configuration dictionary to the caller.
             return config
     # If the file does NOT exist...

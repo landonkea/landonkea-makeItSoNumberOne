@@ -726,6 +726,77 @@ def read_file(path, config=None):
         return f"Error reading file: {e}"
 
 
+# ── Sleep mode (mute) ────────────────────────────────────────────
+# A "stop listening" / mute action. When the user says something
+# like "Computer, stop listening" or "go to sleep for a while", the
+# AI issues a `sleep_mode` action (see ai.py's _JSON_FORMAT_ADDENDUM
+# for the desktop-only prompt instructions that teach the model about
+# it). This module just tracks WHEN muting should end; it's
+# make_it_so.py's job (see _listen_for_wake_word()) to actually skip
+# re-arming the wake-word microphone listener while muted is True —
+# this module has no dependency on audio/mic code, which keeps it
+# trivial to unit test.
+_mute_until = 0.0
+
+# How long a bare "sleep_mode" action (no duration_seconds param)
+# mutes for, in seconds. Five minutes felt like a reasonable "leave
+# me alone for a bit" default without requiring the user to remember
+# to explicitly un-mute.
+DEFAULT_MUTE_SECONDS = 300
+
+
+def enter_sleep_mode(duration_seconds=DEFAULT_MUTE_SECONDS):
+    """
+    Mute wake-word listening for `duration_seconds` from now.
+
+    PARAMETERS
+    ----------
+    duration_seconds : int or float
+        How long to stay muted for. Falls back to
+        DEFAULT_MUTE_SECONDS if given a non-positive value (a
+        negative or zero mute duration wouldn't mute anything, which
+        almost certainly isn't what the user meant when they said
+        "stop listening").
+
+    RETURNS
+    -------
+    str
+        A human-readable confirmation, spoken back to the user so
+        they know muting actually took effect and for how long.
+    """
+    global _mute_until
+
+    try:
+        duration_seconds = float(duration_seconds)
+    except (TypeError, ValueError):
+        duration_seconds = DEFAULT_MUTE_SECONDS
+    if duration_seconds <= 0:
+        duration_seconds = DEFAULT_MUTE_SECONDS
+
+    _mute_until = time.time() + duration_seconds
+    print(f"  [system] Entering sleep mode for {int(duration_seconds)}s")
+
+    minutes = duration_seconds / 60
+    if minutes >= 1:
+        return f"Entering sleep mode for {minutes:.0f} minute(s)."
+    return f"Entering sleep mode for {int(duration_seconds)} second(s)."
+
+
+def is_muted():
+    """True if we're currently inside an active sleep_mode window."""
+    return time.time() < _mute_until
+
+
+def mute_seconds_remaining():
+    """
+    How many seconds are left in the current sleep_mode window.
+    Never negative — clamps to 0 once the window has passed (or if
+    sleep_mode was never entered), so callers can safely
+    `time.sleep()` this value without a negative-duration error.
+    """
+    return max(0.0, _mute_until - time.time())
+
+
 # ── Scrolling ────────────────────────────────────────────────────
 
 def scroll(direction="down", amount=1):
