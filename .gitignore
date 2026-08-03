@@ -47,6 +47,9 @@ ios/*.xcodeproj/xcuserdata/
 # Swift Package Manager build output (checkouts, build artifacts)
 .build/
 
+# ── Generated test-results artifact (see scripts/run_all_tests.sh) ─
+test-results/
+
 # ── OS files ───────────────────────────────────────────────────
 .DS_Store
 Thumbs.db

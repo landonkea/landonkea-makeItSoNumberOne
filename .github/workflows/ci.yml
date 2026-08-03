@@ -34,6 +34,16 @@ jobs:
           cd desktop
           find . -name "*.py" -print0 | xargs -0 python3 -m py_compile
 
+      - name: Run desktop tests and generate report
+        run: scripts/run_all_tests.sh desktop
+
+      - name: Upload desktop test-results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-desktop
+          path: test-results/
+
   android:
     runs-on: ubuntu-latest
     steps:
@@ -51,6 +61,16 @@ jobs:
           chmod +x gradlew
           ./gradlew compileDebugKotlin compileReleaseKotlin
 
+      - name: Run android tests and generate report
+        run: scripts/run_all_tests.sh android
+
+      - name: Upload android test-results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-android
+          path: test-results/
+
   ios:
     runs-on: macos-latest
     steps:
@@ -66,3 +86,13 @@ jobs:
         run: |
           cd ios/MakeItSo
           xcodebuild -scheme MakeItSo -sdk iphonesimulator build
+
+      - name: Run iOS tests and generate report
+        run: scripts/run_all_tests.sh ios
+
+      - name: Upload iOS test-results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-ios
+          path: test-results/

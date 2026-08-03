@@ -119,6 +119,25 @@ opening Xcode.
 None of the three apps can be *run* in a headless environment — they all need a real
 microphone, speakers, and (for Android/iOS) a device or simulator.
 
+### Combined test-results artifact
+
+`scripts/run_all_tests.sh` runs all three platforms' test commands (desktop `unittest`,
+Android `./gradlew testDebugUnitTest`, iOS `xcodebuild test`) and writes a combined
+pass/fail summary — with timestamp and any failures listed — to `test-results/latest.md`.
+That directory is generated output and is gitignored; regenerate it locally with:
+
+```bash
+scripts/run_all_tests.sh          # all 3 platforms → test-results/latest.md
+scripts/run_all_tests.sh desktop  # just one platform → test-results/latest-<platform>.md
+```
+
+Android and iOS don't have real unit test targets yet (see above — compile/build checks
+only), so their sections currently report "no tests found" / "no test target configured"
+rather than a pass/fail count; the script is written to handle that gracefully instead of
+failing the whole run. Raw command output for each platform is kept alongside the report
+in `test-results/raw/`. CI runs the same script per job and uploads each platform's report
+as a build artifact (see `.github/workflows/ci.yml`).
+
 ## Secrets
 
 No API keys, tokens, or credential files are committed anywhere in this repo. Desktop reads
