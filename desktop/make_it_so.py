@@ -114,6 +114,13 @@ def main():
     # restart, instead of always starting from an empty list.
     conversation_history = load_conversation_history()
 
+    # ── Load routines (trigger-phrase macros, see core/routines.py) ─
+    # Loaded once at startup, same as config — routines.yaml is
+    # optional local user data (like config.yaml), so a missing or
+    # broken file just means "no routines," never a startup failure.
+    from core import routines as routines_module
+    routines = routines_module.load_routines()
+
     # ── MAIN LOOP ────────────────────────────────────────────────
     # This loop runs forever, processing one command at a time.
     # Press Ctrl+C at any time to exit gracefully.
@@ -132,7 +139,7 @@ def main():
             # involves live in one focused place instead of inline
             # here.
             keep_running = run_one_conversation_cycle(
-                config, conversation_history
+                config, conversation_history, routines
             )
             if not keep_running:
                 # The wake word listener returned False, meaning it
@@ -190,7 +197,7 @@ def main():
             time.sleep(1)
 
 
-def run_one_conversation_cycle(config, conversation_history):
+def run_one_conversation_cycle(config, conversation_history, routines=None):
     """
     Run exactly one wake -> listen -> think -> speak -> act cycle,
     mutating `conversation_history` in place as the exchange happens.
@@ -207,6 +214,13 @@ def run_one_conversation_cycle(config, conversation_history):
         to the caller's copy of the same list too) rather than
         returning a new list, since the caller needs to keep using
         the same list across every cycle of the main loop.
+    routines : dict or None
+        Loaded from core.routines.load_routines() at startup — maps
+        trigger phrase -> {"response", "actions"}. If what the user
+        said matches a trigger phrase, we run that routine's canned
+        actions directly and skip the AI round-trip entirely. None or
+        {} (the common case — no routines.yaml) just means every
+        request goes to the AI exactly as before this feature existed.
 
     RETURNS
     -------
@@ -230,6 +244,11 @@ def run_one_conversation_cycle(config, conversation_history):
         print("  [main] Could not transcribe. Going back to sleep.")
         return True
 
+    matched_routine = _match_routine(user_text, routines)
+    if matched_routine is not None:
+        _run_routine(matched_routine, user_text, config, conversation_history)
+        return True
+
     result = _ask_ai(user_text, config, conversation_history)
     if result is None:
         print("  [main] Claude did not respond. Going back to sleep.")
@@ -244,6 +263,34 @@ def run_one_conversation_cycle(config, conversation_history):
     _handle_action_results(action_results, conversation_history)
 
     return True
+
+
+def _match_routine(user_text, routines):
+    """
+    Check whether `user_text` invokes one of the loaded routines (see
+    core/routines.py). Returns the matched routine dict, or None.
+    """
+    if not routines:
+        return None
+    from core import routines as routines_module
+    return routines_module.match_routine(user_text, routines)
+
+
+def _run_routine(routine, user_text, config, conversation_history):
+    """
+    Run a matched routine's canned action list directly — no AI
+    round-trip. Speaks the routine's canned "response" (if any), runs
+    its actions through the SAME action_router.execute_actions() the
+    AI path uses, and records the exchange in conversation_history so
+    a later AI turn still has full context of what just happened.
+    """
+    print(f"  [main] Matched routine — running "
+          f"{len(routine['actions'])} canned action(s), no AI call.")
+    spoken_text = routine.get("response", "")
+    _record_exchange(conversation_history, user_text, spoken_text)
+    _speak_reply(spoken_text)
+    action_results = _run_actions(routine.get("actions", []), config)
+    _handle_action_results(action_results, conversation_history)
 
 
 def _listen_for_wake_word(config):

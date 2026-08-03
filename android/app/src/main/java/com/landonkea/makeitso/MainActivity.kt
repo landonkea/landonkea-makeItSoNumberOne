@@ -59,6 +59,13 @@ import kotlinx.coroutines.*
 import java.util.Locale
 // BuildConfig is auto-generated from build.gradle.kts (holds API keys, etc.).
 import com.landonkea.makeitso.BuildConfig
+// JSONArray/JSONObject let us persist conversation history to a small JSON file on disk,
+// the same format desktop's conversation_history.json uses (see loadConversationHistory()/
+// saveConversationHistory() below).
+import org.json.JSONArray
+import org.json.JSONObject
+// File lets us read/write conversationHistory.json in the app's private storage directory.
+import java.io.File
 
 // MainActivity is the entry point of the app — it's the screen that appears when the app launches.
 // ComponentActivity is the standard base for Android activities using Jetpack Compose.
@@ -100,6 +107,22 @@ class MainActivity : ComponentActivity() {
     // simply ignore a new tap while a cycle is already running, which avoids all of that.
     private var assistantJob: Job? = null
 
+    // ── Conversation history ────────────────────────────────────
+    // Bounded list of prior {role, content} turns, mirroring desktop's conversation_history
+    // (see desktop/make_it_so.py) so Claude/Ollama on Android get the same "remembers the last
+    // few exchanges" context desktop already has. Loaded from disk in onCreate() and appended
+    // to after every completed cycle in runAssistantCycle(); MAX_HISTORY_TURNS caps growth the
+    // same way desktop trims to the last 20 entries.
+    private var conversationHistory: MutableList<ConversationTurn> = mutableListOf()
+
+    // ── Conversation history file ────────────────────────────────
+    // Lives in the app's private files directory (filesDir) — not accessible to other apps,
+    // and automatically cleared if the user uninstalls the app. Computed lazily since filesDir
+    // isn't available until the Activity/Context exists.
+    private val historyFile: File by lazy {
+        File(filesDir, "conversation_history.json")
+    }
+
     // ── Config values ──────────────────────────────────────────
     // The operating mode for the assistant:
     //   "auto"    → try Claude API online first, fall back to Ollama offline if it fails
@@ -108,6 +131,12 @@ class MainActivity : ComponentActivity() {
     // This can be loaded from a config file or shared preferences in the future.
     // For now it's hardcoded to "auto" to give the best user experience.
     private val assistantMode = "auto"
+
+    // ── Max conversation history length ──────────────────────────
+    // Matches desktop's default (see desktop/config.example.yaml's settings.max_history: 20) —
+    // 20 entries = 10 user + 10 assistant turns. Kept as a simple constant here since Android
+    // has no equivalent settings file yet (see conversationHistory above).
+    private val maxHistoryTurns = 20
 
     // ── Picovoice Access Key ────────────────────────────────────
     // Reads the Porcupine wake word key from a system property first
@@ -143,6 +172,11 @@ class MainActivity : ComponentActivity() {
 
         // Request microphone permission from the user (required on Android 6.0+ for audio recording).
         requestMicrophonePermission()
+
+        // Load whatever conversation history was saved from a previous run, if any, so context
+        // survives an app restart instead of always starting from an empty list (see
+        // loadConversationHistory() below, and desktop's identical load-on-startup behavior).
+        conversationHistory = loadConversationHistory()
 
         // Initialize the Text-to-Speech engine. The lambda (callback) runs when TTS is ready.
         tts = TextToSpeech(this) { status ->
@@ -263,6 +297,11 @@ class MainActivity : ComponentActivity() {
             // Returns early if every provider failed.
             val result = thinkAboutCommand(speechText) ?: return
 
+            // Record this exchange in conversation history BEFORE speaking/acting, mirroring
+            // desktop's _record_exchange() — so even if a later step throws, the turn we already
+            // got a response for is remembered on the next cycle.
+            recordExchange(speechText, result.spokenText)
+
             // STEP 5: Speak the assistant's response aloud and show it on screen.
             speakResponse(result)
 
@@ -329,7 +368,9 @@ class MainActivity : ComponentActivity() {
         //   "online"  → use Claude API only
         //   "offline" → use Ollama locally only
         // The assistantMode is loaded from config (hardcoded to "auto" for now).
-        val result = ClaudeService.process(speechText, assistantMode)
+        // conversationHistory is passed through so the provider can see prior turns — see
+        // ClaudeService.process()'s doc comment for how each provider uses it.
+        val result = ClaudeService.process(speechText, assistantMode, conversationHistory)
         // If the assistant didn't respond (null means all providers failed)...
         if (result == null) {
             // ...show an error so the caller's "?: return" bails out with the UI updated.
@@ -338,6 +379,71 @@ class MainActivity : ComponentActivity() {
         return result
     }
     // End of thinkAboutCommand().
+
+    // ── Record this turn in conversation history, then persist it ─
+    // Appends the user's speech and the assistant's spoken reply to conversationHistory (in the
+    // same {role, content} shape ClaudeService expects back), trims it to the last
+    // maxHistoryTurns entries, and saves it to disk immediately — mirroring desktop's
+    // per-cycle save_conversation_history() call so a crash or force-quit between cycles
+    // doesn't lose the conversation.
+    private fun recordExchange(userText: String, spokenText: String) {
+        conversationHistory.add(ConversationTurn("user", userText))
+        // Assistant turns are stored as "RESPONSE: <spokenText>" to match the RESPONSE:/ACTIONS:
+        // format the shared system prompt asks for — a replayed assistant turn then looks
+        // exactly like a normal reply would, instead of a bare, format-less sentence.
+        conversationHistory.add(ConversationTurn("assistant", "RESPONSE: $spokenText"))
+        // Keep only the most recent maxHistoryTurns entries (list.takeLast() returns a new
+        // list, so we reassign rather than mutate the old list "in place" from the front).
+        if (conversationHistory.size > maxHistoryTurns) {
+            conversationHistory = conversationHistory.takeLast(maxHistoryTurns).toMutableList()
+        }
+        saveConversationHistory(conversationHistory)
+    }
+    // End of recordExchange().
+
+    // ── Load conversation history saved by a previous run, if any ─
+    // Returns an empty list (rather than throwing) for every failure case — missing file,
+    // unreadable file, corrupt JSON — since history is a nice-to-have, not something worth
+    // crashing startup over. Mirrors desktop's load_conversation_history().
+    private fun loadConversationHistory(): MutableList<ConversationTurn> {
+        if (!historyFile.exists()) {
+            return mutableListOf()
+        }
+        return try {
+            val jsonArray = JSONArray(historyFile.readText())
+            val turns = mutableListOf<ConversationTurn>()
+            for (i in 0 until jsonArray.length()) {
+                val entry = jsonArray.getJSONObject(i)
+                turns.add(ConversationTurn(entry.getString("role"), entry.getString("content")))
+            }
+            turns
+        } catch (e: Exception) {
+            // Corrupt/unreadable history file — log and start fresh rather than crash.
+            e.printStackTrace()
+            mutableListOf()
+        }
+    }
+    // End of loadConversationHistory().
+
+    // ── Persist conversation history to disk ──────────────────────
+    // Writes the current history as a JSON array of {"role", "content"} objects — the exact
+    // shape loadConversationHistory() above reads back. Failures are logged, not raised: losing
+    // the ability to persist history should never crash the assistant mid-conversation.
+    private fun saveConversationHistory(history: List<ConversationTurn>) {
+        try {
+            val jsonArray = JSONArray()
+            for (turn in history) {
+                jsonArray.put(JSONObject().apply {
+                    put("role", turn.role)
+                    put("content", turn.content)
+                })
+            }
+            historyFile.writeText(jsonArray.toString())
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+    // End of saveConversationHistory().
 
     // ── Step 5: speak the assistant's response aloud ─────────────
     // Saves the response text to state (so Compose redraws the screen with it) and hands the

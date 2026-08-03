@@ -25,6 +25,11 @@ desktop/config.yaml
 # whatever the user has said to the assistant — never commit) ──
 desktop/conversation_history.json
 
+# ── Routines (local user macros — may encode personal habits/
+# routines like "unlock the door" — never commit; ship the
+# .example.yaml template instead) ──
+desktop/routines.yaml
+
 # ── Android ────────────────────────────────────────────────────
 *.iml
 .gradle/

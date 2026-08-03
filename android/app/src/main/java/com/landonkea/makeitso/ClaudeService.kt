@@ -62,6 +62,22 @@ data class Action(
     val params: Map<String, String>
 )
 
+// ── Conversation history turn ────────────────────────────────────
+// One remembered exchange, mirroring the desktop Python version's
+// {"role": "user"/"assistant", "content": "..."} dict shape (see
+// desktop/make_it_so.py's _record_exchange()). Kept as its own small
+// data class (rather than a raw Pair<String, String>) so call sites
+// read as "role" / "content" instead of ".first" / ".second".
+data class ConversationTurn(
+    // "user" or "assistant" — who said this.
+    val role: String,
+    // The text of that turn. For assistant turns this is stored as
+    // "RESPONSE: <spokenText>" (matching the shared RESPONSE:/
+    // ACTIONS: prompt format both providers are told to use), so a
+    // replayed turn still looks like a normal assistant reply.
+    val content: String
+)
+
 // "object" in Kotlin creates a singleton — exactly one instance exists for the entire app lifetime.
 // ClaudeService groups all assistant-related functions together in one place,
 // including both the online (Claude) and offline (Ollama) providers.
@@ -129,8 +145,17 @@ object ClaudeService {
     // ── Main entry point: process user text with auto-fallback ──
     // "suspend" means this function is a coroutine — it can pause without blocking the UI thread.
     // It takes the user's speech text and an optional mode string ("auto", "online", or "offline").
+    // `conversationHistory` is the bounded list of prior turns (see ConversationTurn above) that
+    // the caller (MainActivity) maintains across cycles — passing it in lets both providers give
+    // context-aware replies (e.g. "open Safari" then "now search it" knows what "it" refers to),
+    // matching the desktop Python version's conversation_history behavior. Defaults to an empty
+    // list so existing callers that don't pass one keep working exactly as before.
     // Returns a ClaudeResult, or null if ALL providers fail.
-    suspend fun process(userText: String, mode: String = "auto"): ClaudeResult? {
+    suspend fun process(
+        userText: String,
+        mode: String = "auto",
+        conversationHistory: List<ConversationTurn> = emptyList()
+    ): ClaudeResult? {
         // withContext(Dispatchers.IO) switches execution to a background thread pool meant for I/O
         // (network requests, file reads, etc.). The code inside the braces runs on that background thread.
         return withContext(Dispatchers.IO) {
@@ -138,7 +163,7 @@ object ClaudeService {
             // If mode is "auto" or "online", attempt the cloud-based Claude API call.
             if (mode == "auto" || mode == "online") {
                 // Call the private function that handles the Claude API request.
-                val onlineResult = processWithClaude(userText)
+                val onlineResult = processWithClaude(userText, conversationHistory)
                 // If the online call succeeded (result is not null)...
                 if (onlineResult != null) {
                     // ...return the Claude result immediately — no need to try offline.
@@ -152,7 +177,7 @@ object ClaudeService {
             // If mode is "auto" (and online failed) or mode is explicitly "offline"...
             if (mode == "auto" || mode == "offline") {
                 // ...try the local Ollama instance running on the same machine.
-                return@withContext processWithOllama(userText)
+                return@withContext processWithOllama(userText, conversationHistory)
                 // processWithOllama will return null if the local server is unreachable or fails.
             }
 
@@ -169,7 +194,10 @@ object ClaudeService {
     // It sends the user text to Anthropic's cloud API and parses the structured response.
     // "private" means only other functions inside ClaudeService can call this.
     // "suspend" means it's a coroutine and can be paused.
-    private suspend fun processWithClaude(userText: String): ClaudeResult? {
+    private suspend fun processWithClaude(
+        userText: String,
+        conversationHistory: List<ConversationTurn>
+    ): ClaudeResult? {
         // withContext(Dispatchers.IO) runs the network code on a background I/O thread.
         return withContext(Dispatchers.IO) {
             // try-catch is error handling: if anything in "try" throws an exception, we jump to "catch"
@@ -195,7 +223,16 @@ object ClaudeService {
                     put("system", SYSTEM_PROMPT)
 
                     // "messages" is an array of conversation turns (each turn is a JSON object with role + content).
+                    // Earlier turns from conversationHistory come first (oldest to newest — the
+                    // order Claude's API requires), then the user's brand-new utterance last.
                     put("messages", JSONArray().apply {
+                        // Replay each prior turn in its original role/content shape.
+                        for (turn in conversationHistory) {
+                            put(JSONObject().apply {
+                                put("role", turn.role)
+                                put("content", turn.content)
+                            })
+                        }
                         // Add one message object to the array — the user's current utterance.
                         put(JSONObject().apply {
                             // "role": "user" tells Claude this message comes from the human speaking.
@@ -266,7 +303,10 @@ object ClaudeService {
     // It uses the "llama3.2" model and sends the same system prompt + user text.
     // "private" means only other functions inside ClaudeService can call this.
     // "suspend" means it's a coroutine and can be paused.
-    private suspend fun processWithOllama(userText: String): ClaudeResult? {
+    private suspend fun processWithOllama(
+        userText: String,
+        conversationHistory: List<ConversationTurn>
+    ): ClaudeResult? {
         // withContext(Dispatchers.IO) runs the network code on a background I/O thread.
         return withContext(Dispatchers.IO) {
             // try-catch is error handling: if anything in "try" throws an exception, we jump to "catch"
@@ -286,8 +326,11 @@ object ClaudeService {
                     // "model" specifies which Ollama model to use. "llama3.2" is the default local model.
                     // The user must have this model downloaded via `ollama pull llama3.2`.
                     put("model", "llama3.2")
-                    // "prompt" is the main text input from the user (required by Ollama's API).
-                    put("prompt", userText)
+                    // "prompt" is the main text input from the user, prefixed with any earlier
+                    // turns (see buildOllamaPrompt() below) so Ollama's single-string prompt
+                    // format still carries conversation context, the same way Claude's
+                    // structured "messages" array does above.
+                    put("prompt", buildOllamaPrompt(userText, conversationHistory))
                     // "system" sends the system prompt that sets the assistant's personality and output format.
                     // In Ollama's API, "system" is a top-level field (not part of messages).
                     put("system", SYSTEM_PROMPT)
@@ -336,6 +379,25 @@ object ClaudeService {
         // End of withContext(Dispatchers.IO).
     }
     // End of processWithOllama() — the offline provider.
+
+    // ── Build Ollama's single-string prompt from history + new text ─
+    // Ollama's /api/generate endpoint (unlike Claude's Messages API) takes ONE flat text
+    // string rather than a structured list of role-tagged messages, so earlier turns have to be
+    // flattened into that same "User: ...\n\nAssistant: ..." script format before the new
+    // utterance, mirroring desktop/core/ai.py's _build_ollama_prompt().
+    private fun buildOllamaPrompt(userText: String, conversationHistory: List<ConversationTurn>): String {
+        val builder = StringBuilder()
+        for (turn in conversationHistory) {
+            // Capitalize "user"/"assistant" into "User"/"Assistant" to match the script format.
+            val roleLabel = turn.role.replaceFirstChar { it.uppercase() }
+            builder.append(roleLabel).append(": ").append(turn.content).append("\n\n")
+        }
+        // End the prompt with "Assistant:" and nothing after it — the model's cue to continue
+        // the text FROM this point, i.e. generate the assistant's reply next.
+        builder.append("User: ").append(userText).append("\n\nAssistant:")
+        return builder.toString()
+    }
+    // End of buildOllamaPrompt().
 
     // ── Shared response handling for both providers ─────────────
     // Both processWithClaude() and processWithOllama() need to do the exact same three things

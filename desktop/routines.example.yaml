@@ -1,0 +1,39 @@
+# ── routines.example.yaml — copy to routines.yaml to enable macros ──
+# Each top-level key is a trigger phrase. Say "Computer" then any
+# sentence CONTAINING that phrase, and the routine's canned actions
+# run immediately — no AI round-trip, no API cost, same result every
+# time. Anything that doesn't match a trigger below still goes to
+# Claude/Ollama exactly like normal.
+#
+# "response" is optional spoken acknowledgement. "actions" is a list
+# in the exact same {action, params} shape Claude's own JSON replies
+# use (see shared/prompts/system_prompt.txt for the full list of
+# valid action types) — copy/paste straight out of a Claude response
+# you've seen work, if you want.
+#
+# If two triggers both match what you said, the LONGER/more specific
+# phrase wins (see core/routines.py's match_routine()).
+
+good morning:
+  response: "Good morning. Bringing up your morning briefing."
+  actions:
+    - action: open_app
+      params:
+        name: "Mail"
+    - action: search_web
+      params:
+        query: "today's weather forecast"
+
+leaving for work:
+  response: "Have a good day. Locking things down."
+  actions:
+    - action: run_command
+      params:
+        command: "pmset displaysleepnow"
+
+focus time:
+  response: "Entering focus mode. Muting notifications."
+  actions:
+    - action: sleep_mode
+      params:
+        duration_seconds: 1800

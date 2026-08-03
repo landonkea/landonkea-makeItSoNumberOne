@@ -42,6 +42,21 @@ struct ClaudeAction {
     let params: [String: String]
 }
 
+// ── Conversation history turn ────────────────────────────────────
+// One remembered exchange, mirroring the desktop Python version's
+// {"role": "user"/"assistant", "content": "..."} dict shape (see
+// desktop/make_it_so.py's _record_exchange()). Codable so ContentView
+// can persist an array of these to disk as JSON and reload it later.
+struct ConversationTurn: Codable {
+    // "user" or "assistant" — who said this.
+    let role: String
+    // The text of that turn. For assistant turns this is stored as
+    // "RESPONSE: <spokenText>" (matching the RESPONSE:/ACTIONS: prompt
+    // format both providers are told to use), so a replayed turn still
+    // looks like a normal assistant reply.
+    let content: String
+}
+
 // Define the main class that handles talking to the AI brain.
 // A class is like a blueprint for creating objects. This one is a
 // "service" — a reusable component that provides a specific feature
@@ -142,7 +157,12 @@ class ClaudeService {
     //   mode = "online" → try Claude only, no fallback
     //   mode = "offline" → skip Claude, go straight to Ollama
     //   mode = "auto"   → try Claude first, fall back to Ollama on failure
-    func process(_ userText: String) async -> ClaudeResult? {
+    // `conversationHistory` is the bounded list of prior turns (see ConversationTurn above)
+    // that the caller (ContentView) maintains across cycles — passing it in lets both providers
+    // give context-aware replies (e.g. "open Safari" then "now search it" knows what "it"
+    // refers to), matching the desktop Python version's conversation_history behavior. Defaults
+    // to an empty array so existing call sites that don't pass one keep working unchanged.
+    func process(_ userText: String, conversationHistory: [ConversationTurn] = []) async -> ClaudeResult? {
         // Check if the API key is empty (not set). `guard` is a Swift
         // keyword that checks a condition — if it fails, we MUST exit
         // the function (via return). The `!` means "not" — so this
@@ -169,7 +189,7 @@ class ClaudeService {
             // Print a log message so we know we're using offline mode.
             print("AI mode is 'offline' — calling Ollama directly.")
             // Call the Ollama function and return its result directly.
-            return await processWithOllama(userText)
+            return await processWithOllama(userText, conversationHistory: conversationHistory)
         }
 
         // ── ONLINE ATTEMPT (Claude API) ──────────────────────────
@@ -182,7 +202,7 @@ class ClaudeService {
         // result immediately. If mode is "online" and it fails, we
         // return nil (no fallback allowed). If mode is "auto" and it
         // fails, we continue to the Ollama fallback below.
-        if let result = await processWithClaude(userText) {
+        if let result = await processWithClaude(userText, conversationHistory: conversationHistory) {
             // Claude returned a valid result — return it immediately.
             return result
         }
@@ -202,14 +222,17 @@ class ClaudeService {
         print("Claude failed — falling back to offline Ollama.")
         // Call the Ollama function and return whatever it gives us
         // (might be a valid result or nil if Ollama also fails).
-        return await processWithOllama(userText)
+        return await processWithOllama(userText, conversationHistory: conversationHistory)
     }
 
     // ── processWithClaude() — Online: calls Anthropic's Claude API ──
     // This is the ORIGINAL logic extracted into its own function.
     // It sends the user's text to Claude over the internet and parses
     // the structured response (spoken text + actions).
-    private func processWithClaude(_ userText: String) async -> ClaudeResult? {
+    private func processWithClaude(
+        _ userText: String,
+        conversationHistory: [ConversationTurn]
+    ) async -> ClaudeResult? {
         // Open a do-catch block for error handling. This lets us try
         // operations that might fail (like network calls or JSON parsing)
         // and catch any errors that occur. If anything inside the `do`
@@ -220,9 +243,13 @@ class ClaudeService {
             // and "content" (what they said). We put this inside an array
             // (square brackets) because Claude expects a list of messages
             // forming a conversation. `userText` is the transcribed speech.
-            let messages: [[String: Any]] = [
-                ["role": "user", "content": userText]
-            ]
+            // Earlier turns from conversationHistory are replayed first
+            // (oldest to newest, the order Claude's API requires), then
+            // the user's brand-new utterance goes last.
+            var messages: [[String: Any]] = conversationHistory.map {
+                ["role": $0.role, "content": $0.content]
+            }
+            messages.append(["role": "user", "content": userText])
 
             // Build the full request body — a dictionary of all the
             // parameters Claude's API needs. [String: Any] means the
@@ -374,15 +401,25 @@ class ClaudeService {
     // a "prompt" string and get back {"response": "..."}.
     // This function works the same way as processWithClaude — it sends
     // user text to the AI and returns structured ClaudeResult.
-    private func processWithOllama(_ userText: String) async -> ClaudeResult? {
+    private func processWithOllama(
+        _ userText: String,
+        conversationHistory: [ConversationTurn]
+    ) async -> ClaudeResult? {
         // ── Build the conversation prompt ──────────────────────
         // Ollama's API takes a single "prompt" string (not separate
         // messages like Claude). We format it with "User:" and
         // "Assistant:" markers so the model understands the roles.
         // The "\n\n" adds a blank line between the user message and
         // the "Assistant:" prefix that tells the model to start
-        // generating its reply.
-        let promptText = "User: \(userText)\n\nAssistant:"
+        // generating its reply. Earlier turns from conversationHistory
+        // are flattened into this same script format first, mirroring
+        // desktop/core/ai.py's _build_ollama_prompt().
+        var promptText = ""
+        for turn in conversationHistory {
+            let roleLabel = turn.role.prefix(1).uppercased() + turn.role.dropFirst()
+            promptText += "\(roleLabel): \(turn.content)\n\n"
+        }
+        promptText += "User: \(userText)\n\nAssistant:"
 
         // ── Build the JSON request body ────────────────────────
         // This dictionary will be serialized to JSON and sent to

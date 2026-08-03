@@ -64,6 +64,27 @@ struct ContentView: View {
     // onDisappear. It's optional (Task?) because we create it lazily.
     @State private var wakeWordTask: Task<Void, Never>?
 
+    // Bounded list of prior {role, content} turns, mirroring desktop's conversation_history
+    // (see desktop/make_it_so.py) so Claude/Ollama on iOS get the same "remembers the last few
+    // exchanges" context desktop already has. Loaded from disk in onAppear and appended to
+    // after every completed cycle in runAssistantCycle() via recordExchange(). @State so a
+    // reassignment (e.g. trimming) still triggers SwiftUI to keep the value around across
+    // re-renders — we never actually display it, but @State is also just the simplest way to
+    // keep a mutable value alive for the lifetime of this view.
+    @State private var conversationHistory: [ConversationTurn] = []
+
+    // Matches desktop's default (see desktop/config.example.yaml's settings.max_history: 20) —
+    // 20 entries = 10 user + 10 assistant turns. Kept as a simple constant here since iOS has
+    // no equivalent settings file yet.
+    private let maxHistoryTurns = 20
+
+    // Where conversation history is persisted between launches — the app's Documents
+    // directory, which (unlike the bundle) is writable and private to this app.
+    private var historyFileURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("conversation_history.json")
+    }
+
     // This is the required property that every View must have. It
     // describes what to draw on screen. SwiftUI calls this whenever
     // it needs to render (or re-render) the screen. `some View` means
@@ -200,6 +221,10 @@ struct ContentView: View {
         // shows as soon as the app opens, rather than surprising the
         // user later when they try to speak.
         .onAppear {
+            // Load whatever conversation history was saved from a previous launch, if any, so
+            // context survives an app restart instead of always starting from an empty array
+            // (see loadConversationHistory() below, and desktop's identical behavior).
+            conversationHistory = loadConversationHistory()
             // Call the function that requests mic access from the user.
             requestMicrophonePermission()
             // Start the background wake word detection loop. If a
@@ -331,13 +356,23 @@ struct ContentView: View {
         // Call ClaudeService to process the text. The `await` pauses
         // while the network request (or local Ollama call) completes.
         // If it returns nil, something went wrong with both providers.
-        guard let result = await ClaudeService.shared.process(speechText) else {
+        guard let result = await ClaudeService.shared.process(
+            speechText, conversationHistory: conversationHistory
+        ) else {
             // Show an error message if we couldn't get a valid response.
             updateState("AI did not respond. Check your connection or Ollama.")
             // Exit — we can't proceed without a valid response.
             return
         }
         // Close the guard else block.
+
+        // Record this exchange in conversation history BEFORE speaking/acting, mirroring
+        // desktop's _record_exchange() — so even if a later step fails, the turn we already
+        // got a response for is remembered on the next cycle. Runs on the main actor since it
+        // mutates the @State conversationHistory property.
+        await MainActor.run {
+            recordExchange(userText: speechText, spokenText: result.spokenText)
+        }
 
         // STEP 5: Speak the AI's response out loud using text-to-speech.
         // We must update UI properties on the main thread (UIKit/SwiftUI
@@ -399,6 +434,58 @@ struct ContentView: View {
         // Close the assignment.
     }
     // Close the updateState function.
+
+    // ── Record this turn in conversation history, then persist it ─
+    // Appends the user's speech and the assistant's spoken reply to conversationHistory (in the
+    // same {role, content} shape ClaudeService expects back), trims it to the last
+    // maxHistoryTurns entries, and saves it to disk immediately — mirroring desktop's
+    // per-cycle save_conversation_history() call so a crash or force-quit between cycles
+    // doesn't lose the conversation. Must run on the main actor since it mutates the @State
+    // conversationHistory property (see the MainActor.run call site above).
+    @MainActor
+    private func recordExchange(userText: String, spokenText: String) {
+        conversationHistory.append(ConversationTurn(role: "user", content: userText))
+        // Assistant turns are stored as "RESPONSE: <spokenText>" to match the RESPONSE:/ACTIONS:
+        // format the shared system prompt asks for — a replayed assistant turn then looks
+        // exactly like a normal reply would, instead of a bare, format-less sentence.
+        conversationHistory.append(ConversationTurn(role: "assistant", content: "RESPONSE: \(spokenText)"))
+        // Keep only the most recent maxHistoryTurns entries.
+        if conversationHistory.count > maxHistoryTurns {
+            conversationHistory = Array(conversationHistory.suffix(maxHistoryTurns))
+        }
+        saveConversationHistory(conversationHistory)
+    }
+    // Close the recordExchange function.
+
+    // ── Load conversation history saved by a previous launch, if any ─
+    // Returns an empty array (rather than throwing) for every failure case — missing file,
+    // unreadable file, corrupt JSON — since history is a nice-to-have, not something worth
+    // crashing startup over. Mirrors desktop's load_conversation_history().
+    private func loadConversationHistory() -> [ConversationTurn] {
+        guard let data = try? Data(contentsOf: historyFileURL) else {
+            return []
+        }
+        guard let turns = try? JSONDecoder().decode([ConversationTurn].self, from: data) else {
+            print("Could not decode \(historyFileURL.lastPathComponent) — starting with empty history.")
+            return []
+        }
+        return turns
+    }
+    // Close the loadConversationHistory function.
+
+    // ── Persist conversation history to disk ──────────────────────
+    // Writes the current history as JSON — the exact shape loadConversationHistory() above
+    // reads back. Failures are logged, not raised: losing the ability to persist history
+    // should never crash the assistant mid-conversation.
+    private func saveConversationHistory(_ history: [ConversationTurn]) {
+        do {
+            let data = try JSONEncoder().encode(history)
+            try data.write(to: historyFileURL, options: .atomic)
+        } catch {
+            print("Could not save conversation history: \(error)")
+        }
+    }
+    // Close the saveConversationHistory function.
 
     // A function that plays the Star Trek computer chime sound effect.
     // This uses AVFoundation (Apple's audio framework) to play a WAV
