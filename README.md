@@ -67,6 +67,46 @@ To build a standalone binary (`.exe` / `.app`) instead of running from source:
 python build_pyinstaller.py
 ```
 
+#### Running the desktop assistant in Docker (text mode only)
+
+`desktop/Dockerfile` / `docker-compose.yml` run the desktop assistant in a container — but
+**only in text mode**, not voice mode. A container has no real microphone or speaker, so
+rather than ship something that crashes the moment it tries to open an audio device, the
+image runs `desktop/text_mode.py`: a stdin/stdout REPL that drives the *exact same* brain as
+the voice loop (`core/routines.py` macro matching → `core/ai.py` Claude/Ollama calls →
+`core/action_router.py` action execution) from typed text instead of spoken audio. Nothing it
+imports touches `pyaudio` or `pvporcupine`.
+
+This is useful for:
+- Testing `routines.yaml` macros without saying anything out loud.
+- Scripted/CI smoke tests of the AI + action pipeline (see the `desktop` job in
+  `.github/workflows/ci.yml`, which builds this image and runs a real routine through it on
+  every push).
+- Headless/server use, or local development on a machine without a mic hooked up.
+
+**Voice mode (wake word + microphone + speaker) requires running `make_it_so.py` natively on
+real hardware — it is not, and cannot be, containerized.** Android and iOS are native mobile
+apps and can't be containerized either; this Docker setup only ever applies to `desktop/`.
+
+```bash
+cp .env.example .env
+# edit .env and fill in ANTHROPIC_API_KEY (and/or OPENAI_API_KEY, etc.)
+docker compose run --rm desktop
+```
+
+`docker compose run` (not `up`) because this is an interactive stdin/stdout program, not a
+background service. The container's entrypoint (`desktop/docker-entrypoint.sh`) turns the
+`.env` values into `desktop/config.yaml` on first start; alternatively, bind-mount your own
+`config.yaml` / `routines.yaml` over the container's (see the commented `volumes:` lines in
+`docker-compose.yml`) if you'd rather manage those files directly.
+
+To build/run without Compose:
+
+```bash
+docker build -f desktop/Dockerfile -t make-it-so-desktop .   # from the repo root
+docker run --rm -it --env-file .env make-it-so-desktop
+```
+
 ### Android (Kotlin)
 
 Requires Android Studio / the Android SDK (`compileSdk 36`, `minSdk 26`).

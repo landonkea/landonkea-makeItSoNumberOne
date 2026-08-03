@@ -1,0 +1,40 @@
+# ───────────────────────────────────────────────────────────────────
+# .dockerignore — keep the desktop image build fast, small, and safe
+# ───────────────────────────────────────────────────────────────────
+# Build context is the repo root (see desktop/Dockerfile's header),
+# so this needs to exclude the OTHER platforms and anything that
+# shouldn't end up baked into an image (secrets, venvs, caches).
+
+# ── Other platforms — not part of the desktop image ─────────────
+android/
+ios/
+
+# ── Git / CI / editor ─────────────────────────────────────────────
+.git/
+.github/
+.claude/
+.vscode/
+.idea/
+
+# ── Python ──────────────────────────────────────────────────────
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.egg-info/
+desktop/.venv/
+desktop/dist/
+desktop/build/
+**/*.spec
+
+# ── Secrets / local runtime state — never bake into the image ───
+.env
+.env.local
+desktop/config.yaml
+desktop/routines.yaml
+desktop/conversation_history.json
+
+# ── Test artifacts / misc ────────────────────────────────────────
+test-results/
+*.md
+!README.md
+.DS_Store

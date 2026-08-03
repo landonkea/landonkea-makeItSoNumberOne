@@ -1,0 +1,45 @@
+# ───────────────────────────────────────────────────────────────────
+# docker-compose.yml — local dev: desktop assistant in TEXT MODE
+# ───────────────────────────────────────────────────────────────────
+# Runs desktop/text_mode.py in a container — no microphone/speaker
+# access, see desktop/Dockerfile and desktop/text_mode.py for why.
+# Voice mode (make_it_so.py) needs real audio hardware and must be
+# run natively — see README.md.
+#
+# QUICK START
+# -----------
+#   cp .env.example .env        # fill in your API key(s)
+#   docker compose run --rm desktop
+#
+# `run` (not `up`) because this is an interactive stdin/stdout REPL,
+# not a long-running background service.
+# ───────────────────────────────────────────────────────────────────
+
+services:
+  desktop:
+    build:
+      context: .
+      dockerfile: desktop/Dockerfile
+    image: make-it-so-desktop
+    stdin_open: true   # keep stdin open so text_mode.py's REPL works
+    tty: true           # allocate a TTY for a normal interactive prompt
+
+    # API keys / mode come from .env (see .env.example). The
+    # container's entrypoint (desktop/docker-entrypoint.sh) turns
+    # these into config.yaml on first start if one isn't already
+    # mounted in below.
+    env_file:
+      - path: .env
+        required: false
+
+    # No volumes are mounted by default — add some here if you want to
+    # override what's baked into the image, e.g.:
+    #
+    #   volumes:
+    #     # Use a hand-written config.yaml / routines.yaml instead of
+    #     # the .env-generated one (see docker-entrypoint.sh):
+    #     - ./desktop/config.yaml:/app/desktop/config.yaml:ro
+    #     - ./desktop/routines.yaml:/app/desktop/routines.yaml:ro
+    #
+    # By default conversation history just lives in the container's
+    # own filesystem and resets each `docker compose run`.

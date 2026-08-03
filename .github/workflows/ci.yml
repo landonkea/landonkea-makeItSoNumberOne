@@ -37,6 +37,24 @@ jobs:
       - name: Run desktop tests and generate report
         run: scripts/run_all_tests.sh desktop
 
+      # ── Container build + smoke test (additive — text mode only) ──
+      # Builds the text-mode-only Docker image (see desktop/Dockerfile
+      # for why voice mode can't run in a container) and runs a real
+      # conversation turn through it: a routines.yaml macro trigger,
+      # matched and executed end to end through core/routines.py and
+      # core/action_router.py, with no AI API key required (routines
+      # skip the AI round-trip entirely — see core/routines.py) so
+      # this smoke test stays deterministic and free in CI.
+      - name: Build desktop Docker image
+        run: docker build -f desktop/Dockerfile -t make-it-so-desktop:ci .
+
+      - name: Smoke test desktop container (text mode)
+        run: |
+          printf 'focus time\nexit\n' | docker run --rm -i \
+            -v "$PWD/desktop/routines.example.yaml:/app/desktop/routines.yaml:ro" \
+            make-it-so-desktop:ci | tee /tmp/desktop-smoke.log
+          grep -q "Entering sleep mode" /tmp/desktop-smoke.log
+
       - name: Upload desktop test-results artifact
         if: always()
         uses: actions/upload-artifact@v4
