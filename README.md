@@ -15,6 +15,13 @@ The same idea is implemented natively three times, once per platform:
 Shared assets (the wake chime sound and the system prompt sent to Claude) live in `shared/`
 and are copied into each platform's build.
 
+Each platform is also available as a standalone repo (full history preserved, split out of
+this monorepo via `git-filter-repo`):
+
+- [landonkea-makeitso-desktop](https://github.com/landonkea/landonkea-makeitso-desktop)
+- [landonkea-makeitso-android](https://github.com/landonkea/landonkea-makeitso-android)
+- [landonkea-makeitso-ios](https://github.com/landonkea/landonkea-makeitso-ios)
+
 ## How it works
 
 Every platform runs the same loop:
