@@ -50,6 +50,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- ── Settings Activity ─────────────────────────────
+             Lets the user view/edit the Anthropic API key and
+             Picovoice access key at runtime (see SettingsActivity.kt
+             and SettingsRepository.kt) instead of only via
+             BuildConfig at compile time. Not exported — only this
+             app launches it (from MainActivity's settings button). -->
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:label="Settings"
+            android:theme="@style/Theme.MakeItSo" />
     </application>
 
 </manifest>

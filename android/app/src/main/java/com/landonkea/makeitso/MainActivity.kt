@@ -140,10 +140,16 @@ class MainActivity : ComponentActivity() {
 
     // ── Picovoice Access Key ────────────────────────────────────
     // Reads the Porcupine wake word key from a system property first
-    // (useful for testing), then falls back to BuildConfig (set in
-    // app/build.gradle.kts -> PICOVOICE_ACCESS_KEY).
+    // (useful for testing), then the user's saved Settings value (see
+    // SettingsRepository.kt), then finally falls back to BuildConfig
+    // (set in app/build.gradle.kts -> PICOVOICE_ACCESS_KEY) if the user
+    // hasn't entered their own. Resolved once and cached, same as
+    // wakeWordDetector below — changing the key in Settings takes
+    // effect the next time the app is restarted (wakeWordDetector's own
+    // lazy initialization means this is only actually read the first
+    // time the user triggers wake-word detection in a given app run).
     private val picovoiceAccessKey: String by lazy {
-        System.getProperty("picovoice.access.key") ?: BuildConfig.PICOVOICE_ACCESS_KEY
+        System.getProperty("picovoice.access.key") ?: SettingsRepository.getPicovoiceAccessKey(this)
     }
 
     // ── Wake word detector ──────────────────────────────────────
@@ -201,7 +207,11 @@ class MainActivity : ComponentActivity() {
                     // Description of the last executed action.
                     action = lastAction,
                     // Callback function: when the user taps the button, start the assistant cycle.
-                    onStartListening = { startAssistant() }
+                    onStartListening = { startAssistant() },
+                    // Callback function: when the user taps the settings icon, open SettingsActivity
+                    // (see SettingsActivity.kt) where they can view/edit the Anthropic API key and
+                    // Picovoice access key.
+                    onOpenSettings = { startActivity(Intent(this, SettingsActivity::class.java)) }
                 )
             }
         }
@@ -370,7 +380,15 @@ class MainActivity : ComponentActivity() {
         // The assistantMode is loaded from config (hardcoded to "auto" for now).
         // conversationHistory is passed through so the provider can see prior turns — see
         // ClaudeService.process()'s doc comment for how each provider uses it.
-        val result = ClaudeService.process(speechText, assistantMode, conversationHistory)
+        // The Anthropic API key is re-resolved from SettingsRepository on every call (rather
+        // than cached like picovoiceAccessKey above), so a key the user just saved in Settings
+        // takes effect on the very next request — no app restart required.
+        val result = ClaudeService.process(
+            speechText,
+            assistantMode,
+            conversationHistory,
+            SettingsRepository.getAnthropicApiKey(this)
+        )
         // If the assistant didn't respond (null means all providers failed)...
         if (result == null) {
             // ...show an error so the caller's "?: return" bails out with the UI updated.
@@ -566,8 +584,13 @@ fun MakeItSoScreen(
     // action: description of the last action executed.
     action: String,
     // onStartListening: a callback function invoked when the user taps the "Say 'Computer'" button.
-    onStartListening: () -> Unit
+    onStartListening: () -> Unit,
+    // onOpenSettings: a callback function invoked when the user taps the settings icon, to open
+    // SettingsActivity (view/edit the Anthropic API key and Picovoice access key).
+    onOpenSettings: () -> Unit
 ) {
+    // Box lets us layer the settings button in the corner on top of the centered Column below.
+    Box(modifier = Modifier.fillMaxSize()) {
     // Column arranges its children vertically, one on top of another (like a vertical flexbox).
     Column(
         // Modifier decorates the Column — fillMaxSize() makes it take up the entire screen.
@@ -661,5 +684,21 @@ fun MakeItSoScreen(
         // End of action check.
     }
     // End of Column.
+
+    // ── Settings button ────────────────────────────────────────
+    // A small icon-less text button pinned to the top-right corner
+    // (via Box's Alignment.TopEnd), on top of the centered Column
+    // above. Opens SettingsActivity where the user can view/edit
+    // the Anthropic API key and Picovoice access key.
+    TextButton(
+        onClick = onOpenSettings,
+        modifier = Modifier
+            .align(Alignment.TopEnd)
+            .padding(8.dp)
+    ) {
+        Text("⚙ Settings")
+    }
+    }
+    // End of Box.
 }
 // End of MakeItSoScreen.

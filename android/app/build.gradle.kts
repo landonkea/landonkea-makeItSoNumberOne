@@ -85,6 +85,14 @@ dependencies {
     // ── JSON parsing (for API responses) ─────────────────────
     implementation("org.json:json:20231013")
 
+    // ── Secure settings storage (EncryptedSharedPreferences) ──
+    // Backs SettingsRepository.kt — lets the user enter their own
+    // Anthropic/Picovoice keys at runtime instead of only via
+    // BuildConfig, encrypted at rest with an Android Keystore-backed
+    // master key (unlike plain SharedPreferences, which stores values
+    // as cleartext XML on disk).
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
     // ── Wake word detection (Picovoice Porcupine) ─────────────
     // Enables on-device "Computer" wake word detection.
     // Requires a free access key from https://console.picovoice.ai/
@@ -101,4 +109,11 @@ dependencies {
     //
     // Future: if we want to bundle an embedded LLM, we'd add a
     // dependency like `org.pytorch:pytorch_android:2.1.0` here.
+
+    // ── Unit tests (JVM, no Android device/emulator needed) ───
+    // Backs SettingsRepositoryTest.kt — EncryptedSharedPreferences itself
+    // needs the Android Keystore (unavailable in a plain JVM unit test),
+    // so SettingsRepository's fallback logic is split into a pure
+    // resolveKey() function that these tests exercise directly.
+    testImplementation("junit:junit:4.13.2")
 }

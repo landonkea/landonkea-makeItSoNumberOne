@@ -150,11 +150,18 @@ object ClaudeService {
     // context-aware replies (e.g. "open Safari" then "now search it" knows what "it" refers to),
     // matching the desktop Python version's conversation_history behavior. Defaults to an empty
     // list so existing callers that don't pass one keep working exactly as before.
+    // `apiKey` is the Anthropic API key to send with the request. Defaults to the
+    // BuildConfig-injected value (see app/build.gradle.kts -> ANTHROPIC_API_KEY) for backward
+    // compatibility, but MainActivity always passes the resolved value from
+    // SettingsRepository.getAnthropicApiKey() — the user's saved key if they've set one,
+    // otherwise that same BuildConfig default — so a key change in Settings takes effect
+    // immediately without needing to touch this default.
     // Returns a ClaudeResult, or null if ALL providers fail.
     suspend fun process(
         userText: String,
         mode: String = "auto",
-        conversationHistory: List<ConversationTurn> = emptyList()
+        conversationHistory: List<ConversationTurn> = emptyList(),
+        apiKey: String = BuildConfig.ANTHROPIC_API_KEY
     ): ClaudeResult? {
         // withContext(Dispatchers.IO) switches execution to a background thread pool meant for I/O
         // (network requests, file reads, etc.). The code inside the braces runs on that background thread.
@@ -163,7 +170,7 @@ object ClaudeService {
             // If mode is "auto" or "online", attempt the cloud-based Claude API call.
             if (mode == "auto" || mode == "online") {
                 // Call the private function that handles the Claude API request.
-                val onlineResult = processWithClaude(userText, conversationHistory)
+                val onlineResult = processWithClaude(userText, conversationHistory, apiKey)
                 // If the online call succeeded (result is not null)...
                 if (onlineResult != null) {
                     // ...return the Claude result immediately — no need to try offline.
@@ -196,7 +203,8 @@ object ClaudeService {
     // "suspend" means it's a coroutine and can be paused.
     private suspend fun processWithClaude(
         userText: String,
-        conversationHistory: List<ConversationTurn>
+        conversationHistory: List<ConversationTurn>,
+        apiKey: String
     ): ClaudeResult? {
         // withContext(Dispatchers.IO) runs the network code on a background I/O thread.
         return withContext(Dispatchers.IO) {
@@ -252,8 +260,9 @@ object ClaudeService {
                     // Set the destination URL for this request.
                     .url(url)
                     // Add an HTTP header with our secret API key so Anthropic knows who we are.
-                    // BuildConfig.ANTHROPIC_API_KEY is generated from BuildConfig during compilation.
-                    .addHeader("x-api-key", BuildConfig.ANTHROPIC_API_KEY)
+                    // Resolved by the caller (see process()'s apiKey parameter doc above) — either
+                    // the user's saved Settings key or the BuildConfig-injected default.
+                    .addHeader("x-api-key", apiKey)
                     // Tell the server which version of the Anthropic API we expect to talk to.
                     .addHeader("anthropic-version", "2023-06-01")
                     // Declare that our request body contains JSON (so the server knows how to parse it).
