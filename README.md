@@ -61,6 +61,53 @@ This is desktop-only: new action types reach the model via a JSON-format addendu
 desktop's system prompt gets (see `core/ai.py`) — Android/iOS parse the shared
 `RESPONSE:`/`ACTIONS:` text format and have no equivalent extension point yet.
 
+### Writing an action plugin (desktop)
+
+Every action desktop can run — `open_app`, `search_web`, `sleep_mode`, the weather/calendar/
+reminders integrations above, all of them — is an **`ActionPlugin`** (`desktop/core/
+plugin_base.py`), dispatched through a `{action_name: plugin}` registry in `desktop/core/
+action_router.py` instead of a hardcoded if/elif chain. Built-in plugins live in `desktop/core/
+plugins_builtin.py`; you can add your own without touching any core file.
+
+**How discovery works.** At startup, `core/plugin_loader.py` scans `desktop/plugins/` (a real
+directory, gitignored — see below) for `*.py` files sitting directly in it (not
+subdirectories) and loads every `ActionPlugin` subclass it finds. A plugin file that fails to
+import, defines a class with a blank `action_name`, doesn't implement `execute()`, or tries to
+reuse an already-registered action name is logged (`[plugins] Skipping ...`) and **skipped, not
+raised** — a broken third-party plugin can never stop the assistant from starting, the same
+"never block startup" guarantee `routines.yaml` gets (see `core/routines.py`). A third-party
+plugin can never override a built-in action name.
+
+**Writing one.** Subclass `ActionPlugin`, set `action_name` (required — the string
+Claude/routines.yaml use to invoke it), optionally `description` and `param_schema` (informal
+documentation, not validated), and implement `execute(self, params, config) -> str`:
+
+```python
+# desktop/plugins/my_plugin.py
+from core.plugin_base import ActionPlugin
+
+class FlipCoinPlugin(ActionPlugin):
+    action_name = "flip_coin"
+    description = "Flip a coin and report heads or tails."
+    param_schema = {}
+
+    def execute(self, params: dict, config: dict) -> str:
+        import random
+        return random.choice(["Heads!", "Tails!"])
+```
+
+Drop the file in `desktop/plugins/` and restart the assistant — you'll see `[plugins] Loaded
+plugin "flip_coin" from my_plugin.py (FlipCoinPlugin)` at startup, and `flip_coin` becomes a
+usable action. `execute()` should never raise for a foreseeable error (missing config, bad
+params, a failed network call) — return a clear message instead, the same convention every
+built-in action follows (see `actions/integrations.py`'s `get_weather()` for the pattern).
+
+A fully worked template lives at `desktop/plugins/examples/coin_flip_plugin.py` — copy it into
+`desktop/plugins/` to try it. `desktop/plugins/*.py` is gitignored (third-party plugins are
+local, user-supplied code — same reasoning as `routines.yaml`); `desktop/plugins/examples/` is
+the one part of that directory that stays tracked, since it's a documented template rather than
+a personal plugin.
+
 ## Platform setup
 
 ### Desktop (Python)
@@ -172,7 +219,9 @@ opening Xcode.
 ## Tests / verification
 
 - **Desktop**: `desktop/tests/` has an automated `unittest` suite (no pytest needed) covering
-  the `run_command`/`read_file` security gates — run with
+  the `run_command`/`read_file` security gates and the plugin system (`test_plugins.py` —
+  discovery, malformed-plugin handling, built-in actions dispatched through the plugin
+  registry) — run with
   `cd desktop && python3 -m unittest discover -s tests -v`. There's no test suite yet for the
   rest of the app (wake word, audio, AI calls all need real hardware/API access), but
   `python3 -m py_compile make_it_so.py core/*.py core/actions/*.py build_pyinstaller.py` — passes, no syntax errors.

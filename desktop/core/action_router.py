@@ -9,25 +9,77 @@
 #     params:
 #       name: Safari
 #
-# The router calls `actions.system.open_app("Safari")`.
+# The router looks up "open_app" in a REGISTRY of ActionPlugin
+# instances (core/plugin_base.py's ActionPlugin interface) and calls
+# its execute() method.
+#
+# WHERE THE REGISTRY COMES FROM
+# --------------------------------
+# Every action is a plugin — there's no separate fast path for
+# built-ins vs. third-party actions:
+#   1. Built-in plugins (open_app, search_web, sleep_mode, the
+#      weather/calendar/reminders integrations, etc.) come from
+#      core/plugins_builtin.py's BUILTIN_PLUGINS list.
+#   2. Third-party plugins are auto-discovered at import time from
+#      the desktop/plugins/ directory (gitignored — see
+#      desktop/plugins/examples/ for a template, and README.md's
+#      "Writing a plugin" section for how to write your own) by
+#      core/plugin_loader.py.
+# A third-party plugin can never override a built-in action name —
+# see plugin_loader.build_registry()/discover_plugins() for that
+# collision handling, and for why a malformed plugin file is logged
+# and skipped rather than crashing startup (same philosophy as
+# routines.yaml — see core/routines.py).
 #
 # This is like the "transporter room" — it receives commands and
 # routes them to the right department (system control, web search,
-# file operations, etc.).
+# file operations, etc.), it just does that via a lookup table now
+# instead of a long if/elif chain.
 # ───────────────────────────────────────────────────────────────────
 
-# Import the "actions" module from the same folder (the dot "."
-# means "current package"). The actions module contains all the
-# actual handler functions like open_app, search_web, type_text,
-# etc. This import makes them available as actions.system, etc.
-from . import actions
+import os
+
+from .plugin_loader import build_registry
+from .plugins_builtin import BUILTIN_PLUGINS
+
+# desktop/core/action_router.py -> desktop/plugins. Resolved from
+# this file's own location (not the process's current working
+# directory) so the registry loads correctly regardless of where the
+# assistant was launched from.
+PLUGINS_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "plugins"
+)
+
+
+def load_registry(plugins_dir=PLUGINS_DIR, builtin_plugins=None):
+    """
+    Build the {action_name: plugin_instance} registry used to
+    dispatch actions. A thin wrapper around plugin_loader.
+    build_registry() so callers (including tests) don't need to know
+    about plugins_builtin.BUILTIN_PLUGINS directly, and so tests can
+    point `plugins_dir` at a temporary directory instead of the real
+    desktop/plugins/.
+    """
+    return build_registry(
+        BUILTIN_PLUGINS if builtin_plugins is None else builtin_plugins,
+        plugins_dir,
+    )
+
+
+# Built once at import time — mirrors routines.yaml being loaded once
+# at startup rather than re-read on every request. Tests that need a
+# custom registry (e.g. to exercise plugin discovery against a
+# scratch directory) can call load_registry(...) themselves and pass
+# the result straight into execute_action()/execute_actions() via the
+# `registry` parameter instead of touching this module-level default.
+REGISTRY = load_registry()
 
 
 # Define a function called "execute_action" that takes two arguments:
 # "action_dict" (a dictionary describing what to do) and "config"
 # (the app's settings). This function runs ONE action and returns
 # a message about whether it succeeded or failed.
-def execute_action(action_dict, config):
+def execute_action(action_dict, config, registry=None):
     """
     Execute a single action returned by Claude.
 
@@ -38,6 +90,12 @@ def execute_action(action_dict, config):
         {"action": "open_app", "params": {"name": "Safari"}}
     config : dict
         The app configuration (API keys, settings).
+    registry : dict, optional
+        {action_name: plugin_instance} to dispatch through. Defaults
+        to the module-level REGISTRY (built-ins + whatever was
+        discovered in desktop/plugins/ at import time). Tests pass
+        their own registry here to exercise a specific plugin set
+        without touching the real one.
 
     RETURNS
     -------
@@ -45,6 +103,8 @@ def execute_action(action_dict, config):
         A result message (e.g. "Done" or error description).
         None if the action type is unknown.
     """
+    registry = REGISTRY if registry is None else registry
+
     # Extract the "action" field from the action dictionary (e.g.,
     # "open_app", "search_web"). .get() returns an empty string if
     # the key doesn't exist, which prevents a KeyError crash.
@@ -63,151 +123,25 @@ def execute_action(action_dict, config):
         # (e.g., which app to open, what text to type).
         print(f"  [router] Params: {params}")
 
-    # ── Route to the correct handler based on action type ─────
-    # Each "if/elif" checks the action_type string and calls the
-    # correct handler function from the actions module.
-
-    # Check if the action is "open_app" (launch a program).
-    if action_type == "open_app":
-        # Call the open_app function in actions.system, passing the
-        # app name from params. If "name" is missing, use "".
-        return actions.system.open_app(params.get("name", ""))
-
-    # Otherwise, check if the action is "search_web" (search Google).
-    elif action_type == "search_web":
-        # Call the search_web function in actions.web_actions,
-        # passing the search query and the full config (for API keys).
-        return actions.web_actions.search_web(
-            params.get("query", ""),
-            config
-        )
-
-    # Otherwise, check if the action is "type_text" (type out text).
-    elif action_type == "type_text":
-        # Call the type_text function with the text to type.
-        return actions.system.type_text(params.get("text", ""))
-
-    # Otherwise, check if the action is "press_keys" (keyboard combo).
-    elif action_type == "press_keys":
-        # Get the keys parameter (e.g., "command,space" or a list).
-        keys = params.get("keys", "")
-        # Keys can be a string like "command,space" or a list.
-        # Check if keys is a string (text) rather than a list.
-        if isinstance(keys, str):
-            # Split the string by commas and remove extra spaces
-            # around each key name. This turns "a, b, c" into
-            # ["a", "b", "c"].
-            keys = [k.strip() for k in keys.split(",")]
-        # Call the press_keys function with the list of key names.
-        return actions.system.press_keys(keys)
-
-    # Otherwise, check if the action is "run_command" (run terminal).
-    elif action_type == "run_command":
-        # Call the run_command function with the command string.
-        # `config` is also passed through here (unlike the other
-        # handlers above) because run_command reads its
-        # `security.allowed_commands` / `security.
-        # command_confirmation_required` settings from it — see
-        # actions/system.py's SECURITY section for why.
-        return actions.system.run_command(params.get("command", ""), config)
-
-    # Otherwise, check if the action is "read_file" (read a file).
-    elif action_type == "read_file":
-        # Call the read_file function with the file path. `config` is
-        # passed through so read_file can check the path against its
-        # `security.denied_read_paths` denylist — see actions/
-        # system.py's SECURITY section for why.
-        return actions.system.read_file(params.get("path", ""), config)
-
-    # Otherwise, check if the action is "confirm_command" (the user
-    # said "confirm" to approve a run_command that was held back
-    # pending confirmation — see actions/system.py's SECURITY
-    # section). This action takes no params: it only ever executes
-    # whatever command is already sitting in the pending-confirmation
-    # slot, never a fresh command text from this action's params, so
-    # a compromised/injected response can't swap in a different
-    # command at confirmation time.
-    elif action_type == "confirm_command":
-        return actions.system.confirm_pending_command()
-
-    # Otherwise, check if the action is "sleep_mode" (mute/"stop
-    # listening" — see actions/system.py's enter_sleep_mode() for
-    # what actually happens; make_it_so.py's _listen_for_wake_word()
-    # is what skips re-arming the wake-word listener while muted).
-    elif action_type == "sleep_mode":
-        return actions.system.enter_sleep_mode(
-            params.get("duration_seconds", actions.system.DEFAULT_MUTE_SECONDS)
-        )
-
-    # Otherwise, check if the action is "scroll" (scroll up/down).
-    elif action_type == "scroll":
-        # Call the scroll function with direction (up/down) and
-        # amount (how many steps). Convert "amount" to an integer
-        # using int() since params always stores strings.
-        return actions.system.scroll(
-            params.get("direction", "down"),
-            int(params.get("amount", 1))
-        )
-
-    # Otherwise, check if the action is "click" (mouse click).
-    elif action_type == "click":
-        # Call the click function with x and y coordinates.
-        # Convert both to integers because mouse coordinates are
-        # always whole numbers (pixels on screen).
-        return actions.system.click(
-            int(params.get("x", 0)),
-            int(params.get("y", 0))
-        )
-
-    # Otherwise, check if the action is "get_weather" (real weather
-    # lookup via Open-Meteo or OpenWeatherMap — see actions/
-    # integrations.py for provider/credential handling).
-    elif action_type == "get_weather":
-        return actions.integrations.get_weather(
-            params.get("location", ""), config
-        )
-
-    # Otherwise, check if the action is "get_calendar_events" (reads
-    # a configured .ics calendar feed — see actions/integrations.py).
-    elif action_type == "get_calendar_events":
-        return actions.integrations.get_calendar_events(
-            config, int(params.get("days", 7))
-        )
-
-    # Otherwise, check if the action is "add_reminder" (creates a
-    # Todoist task — see actions/integrations.py).
-    elif action_type == "add_reminder":
-        return actions.integrations.add_reminder(
-            params.get("text", ""), config
-        )
-
-    # Otherwise, check if the action is "list_reminders" (lists open
-    # Todoist tasks — see actions/integrations.py). No params.
-    elif action_type == "list_reminders":
-        return actions.integrations.list_reminders(config)
-
-    # Otherwise, check if the action is "complete_reminder" (marks a
-    # matching Todoist task done — see actions/integrations.py).
-    elif action_type == "complete_reminder":
-        return actions.integrations.complete_reminder(
-            params.get("query", ""), config
-        )
-
-    # If none of the above action types matched, we don't know
-    # what this action is. This is the "catch-all" else block.
-    else:
-        # Print a warning showing the unknown action type so the
-        # developer knows to add support for it in the future.
+    # ── Route to the correct handler via the plugin registry ──────
+    plugin = registry.get(action_type)
+    if plugin is None:
+        # If none of the registered plugins matched, we don't know
+        # what this action is. Print a warning showing the unknown
+        # action type so the developer knows to add support for it
+        # (or the user knows their third-party plugin didn't load —
+        # check the "[plugins]" startup log lines).
         print(f"  [router] Unknown action type: \"{action_type}\"")
-        # Return None since we couldn't execute the action.
         return None
+
+    return plugin.execute(params, config)
 
 
 # Define a function called "execute_actions" (plural) that takes
 # two arguments: "action_list" (a list of action dictionaries) and
 # "config". This function runs MULTIPLE actions in sequence (one
 # after another) and returns all the results as a list.
-def execute_actions(action_list, config):
+def execute_actions(action_list, config, registry=None):
     """
     Execute a list of actions returned by Claude.
 
@@ -217,6 +151,8 @@ def execute_actions(action_list, config):
         List of action dictionaries to execute in order.
     config : dict
         The app configuration.
+    registry : dict, optional
+        See execute_action() — defaults to the module-level REGISTRY.
 
     RETURNS
     -------
@@ -255,8 +191,12 @@ def execute_actions(action_list, config):
         # abort the ENTIRE batch, silently skipping every action
         # after it. Catching it here means one bad action just
         # reports an error while the rest of the list still runs.
+        # This also covers a third-party plugin's execute() raising
+        # an unexpected exception — same "one bad action doesn't
+        # sink the batch" guarantee applies to plugins as to any
+        # built-in action.
         try:
-            result = execute_action(action, config)
+            result = execute_action(action, config, registry=registry)
         except Exception as e:
             print(f"  [router]   -> Action failed: {e}")
             result = f"Error: {e}"

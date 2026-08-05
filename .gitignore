@@ -30,6 +30,14 @@ desktop/conversation_history.json
 # .example.yaml template instead) ──
 desktop/routines.yaml
 
+# ── Third-party action plugins (local, user-supplied Python — may
+# contain anything from personal automations to accidental secrets;
+# never commit. desktop/plugins/examples/ is the documented template
+# and stays tracked — everything else directly under desktop/plugins/
+# is ignored) ──
+desktop/plugins/*
+!desktop/plugins/examples/
+
 # ── Android ────────────────────────────────────────────────────
 *.iml
 .gradle/
