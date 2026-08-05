@@ -121,6 +121,23 @@ def main():
     from core import routines as routines_module
     routines = routines_module.load_routines()
 
+    # ── Load personalization profile(s) (see core/profile.py) ─────
+    # Same "optional, never fatal" treatment as routines.yaml/
+    # config.yaml — a missing or broken profile.yaml just means no
+    # name/preferred-apps/contact-nickname personalization happens.
+    # `profile_store` is mutated in place by a "switch to X's
+    # profile" voice command (see _maybe_switch_profile() below), the
+    # same pattern conversation_history already uses to let a shared
+    # mutable value be updated across cycles without reassignment.
+    from core import profile as profile_module
+    profile_store = profile_module.load_profiles()
+    active_profile_names = profile_module.list_profile_names(profile_store)
+    if active_profile_names:
+        active_name = profile_module.get_active_profile(profile_store).get("name") \
+            or profile_store.get("active")
+        print(f"  [profile] Active profile: {active_name} "
+              f"({len(active_profile_names)} configured)")
+
     # ── MAIN LOOP ────────────────────────────────────────────────
     # This loop runs forever, processing one command at a time.
     # Press Ctrl+C at any time to exit gracefully.
@@ -139,7 +156,7 @@ def main():
             # involves live in one focused place instead of inline
             # here.
             keep_running = run_one_conversation_cycle(
-                config, conversation_history, routines
+                config, conversation_history, routines, profile_store
             )
             if not keep_running:
                 # The wake word listener returned False, meaning it
@@ -197,7 +214,9 @@ def main():
             time.sleep(1)
 
 
-def run_one_conversation_cycle(config, conversation_history, routines=None):
+def run_one_conversation_cycle(
+    config, conversation_history, routines=None, profile_store=None
+):
     """
     Run exactly one wake -> listen -> think -> speak -> act cycle,
     mutating `conversation_history` in place as the exchange happens.
@@ -221,6 +240,17 @@ def run_one_conversation_cycle(config, conversation_history, routines=None):
         actions directly and skip the AI round-trip entirely. None or
         {} (the common case — no routines.yaml) just means every
         request goes to the AI exactly as before this feature existed.
+    profile_store : dict or None
+        Loaded from core.profile.load_profiles() at startup — see
+        that module for the {"profiles", "active"} shape. A "switch
+        to X's profile" utterance is detected and handled BEFORE
+        routine/AI matching (mutating profile_store["active"] in
+        place, same "shared mutable value" pattern as
+        conversation_history). The resulting active profile is used
+        to resolve contact nicknames / preferred-app aliases in
+        whatever actions end up running this cycle (routine or AI).
+        None just means no personalization/nickname resolution
+        happens, same as routines=None meaning no routines match.
 
     RETURNS
     -------
@@ -244,13 +274,39 @@ def run_one_conversation_cycle(config, conversation_history, routines=None):
         print("  [main] Could not transcribe. Going back to sleep.")
         return True
 
-    matched_routine = _match_routine(user_text, routines)
-    if matched_routine is not None:
-        _run_routine(matched_routine, user_text, config, conversation_history)
+    switch_reply = _maybe_switch_profile(user_text, profile_store)
+    if switch_reply is not None:
+        _record_exchange(conversation_history, user_text, switch_reply)
+        _speak_reply(switch_reply)
         return True
 
-    result = _ask_ai(user_text, config, conversation_history)
+    active_profile = _active_profile(profile_store)
+
+    matched_routine = _match_routine(user_text, routines)
+    if matched_routine is not None:
+        _run_routine(
+            matched_routine, user_text, config, conversation_history,
+            profile=active_profile,
+        )
+        return True
+
+    # ── Streaming TTS ────────────────────────────────────────────
+    # A fresh SpeechQueue per turn. Its enqueue() is handed to
+    # _ask_ai() as the on_sentence callback (see core/ai.py's
+    # process_with_claude_streaming()): if the online Claude path is
+    # used, each sentence of the reply is enqueued — and starts
+    # playing on SpeechQueue's background worker thread — the moment
+    # it's ready, while the rest of the reply may still be
+    # generating. If the offline Ollama path is used instead (or the
+    # online call fails outright), on_sentence is simply never
+    # called and the queue stays empty, exactly as if streaming
+    # didn't exist.
+    speech_queue = _new_speech_queue()
+    result = _ask_ai(
+        user_text, config, conversation_history, on_sentence=speech_queue.enqueue
+    )
     if result is None:
+        speech_queue.close()
         print("  [main] Claude did not respond. Going back to sleep.")
         return True
 
@@ -258,11 +314,58 @@ def run_one_conversation_cycle(config, conversation_history, routines=None):
     actions = result.get("actions", [])
     _record_exchange(conversation_history, user_text, spoken_text)
 
-    _speak_reply(spoken_text)
-    action_results = _run_actions(actions, config)
+    _speak_reply_or_wait_for_stream(speech_queue, result, spoken_text)
+    action_results = _run_actions(actions, config, profile=active_profile)
     _handle_action_results(action_results, conversation_history)
 
     return True
+
+
+def _active_profile(profile_store):
+    """
+    Return the currently-active profile dict from `profile_store`
+    (see core/profile.py:get_active_profile()), or None if no
+    profiles are configured — kept as a thin wrapper so call sites
+    above don't need to import core.profile just to read one dict.
+    """
+    if not profile_store:
+        return None
+    from core import profile as profile_module
+    return profile_module.get_active_profile(profile_store)
+
+
+def _maybe_switch_profile(user_text, profile_store):
+    """
+    Check whether `user_text` is a "switch to X's profile" request
+    (see core/profile.py:detect_profile_switch_request()) and, if so,
+    act on it immediately — no AI round-trip, same rationale as
+    routine matching.
+
+    RETURNS
+    -------
+    str or None
+        A spoken confirmation/failure reply if `user_text` looked
+        like a switch request (whether or not the named profile
+        actually matched one that's configured), or None if
+        `user_text` wasn't a switch request at all — the caller
+        should treat None as "keep going, this wasn't about
+        profiles."
+    """
+    if not profile_store:
+        return None
+    from core import profile as profile_module
+    candidate = profile_module.detect_profile_switch_request(user_text)
+    if candidate is None:
+        return None
+
+    matched_key = profile_module.switch_active_profile(profile_store, candidate)
+    if matched_key is None:
+        print(f"  [main] \"{candidate}\" didn't match any configured profile.")
+        return f"I don't have a profile set up for {candidate}."
+
+    display_name = profile_store["profiles"][matched_key].get("name") or matched_key
+    print(f"  [main] Switched active profile to \"{matched_key}\".")
+    return f"Switched to {display_name}'s profile."
 
 
 def _match_routine(user_text, routines):
@@ -276,20 +379,29 @@ def _match_routine(user_text, routines):
     return routines_module.match_routine(user_text, routines)
 
 
-def _run_routine(routine, user_text, config, conversation_history):
+def _run_routine(routine, user_text, config, conversation_history, profile=None):
     """
     Run a matched routine's canned action list directly — no AI
     round-trip. Speaks the routine's canned "response" (if any), runs
     its actions through the SAME action_router.execute_actions() the
     AI path uses, and records the exchange in conversation_history so
     a later AI turn still has full context of what just happened.
+
+    profile : dict or None
+        The active personalization profile (see core/profile.py) —
+        passed through to _run_actions() so a routine's canned
+        actions (e.g. a "text Mom" routine) get the same contact-
+        nickname/preferred-app resolution the AI path gets. None
+        just means no resolution happens, same as everywhere else.
     """
     print(f"  [main] Matched routine — running "
           f"{len(routine['actions'])} canned action(s), no AI call.")
     spoken_text = routine.get("response", "")
     _record_exchange(conversation_history, user_text, spoken_text)
     _speak_reply(spoken_text)
-    action_results = _run_actions(routine.get("actions", []), config)
+    action_results = _run_actions(
+        routine.get("actions", []), config, profile=profile
+    )
     _handle_action_results(action_results, conversation_history)
 
 
@@ -376,19 +488,59 @@ def _transcribe_speech(audio_data, config):
     return stt.transcribe(audio_data, config)
 
 
-def _ask_ai(user_text, config, conversation_history):
+def _ask_ai(user_text, config, conversation_history, on_sentence=None):
     """
     Send the transcribed text to the AI brain (Claude if online,
     Ollama/Llama if offline) and get back what to say and do.
 
+    on_sentence : callable or None
+        Forwarded straight to core.ai.process_with_ai() — see that
+        function's docstring. When given, each complete sentence of
+        the ONLINE Claude reply is handed to this callback as soon
+        as it's ready (used to start speaking a reply before the
+        rest of it has finished generating — see core/tts.py's
+        SpeechQueue). Ignored for the offline Ollama path.
+
     RETURNS
     -------
     dict or None
-        {"spoken_text": str, "actions": list}, or None if every
-        available AI backend failed to respond.
+        {"spoken_text": str, "actions": list, "streamed": bool}, or
+        None if every available AI backend failed to respond.
     """
     from core import ai
-    return ai.process_with_ai(user_text, config, conversation_history)
+    return ai.process_with_ai(
+        user_text, config, conversation_history, on_sentence=on_sentence
+    )
+
+
+def _new_speech_queue():
+    """Create a fresh core.tts.SpeechQueue for one conversation turn
+    (see core/tts.py — a background worker thread that speaks
+    enqueued sentences strictly in order, one at a time)."""
+    from core import tts
+    return tts.SpeechQueue()
+
+
+def _speak_reply_or_wait_for_stream(speech_queue, result, spoken_text):
+    """
+    Finish speaking this turn's reply, however it was produced.
+
+    If `result["streamed"]` is True (see core/ai.py's
+    process_with_claude_streaming()), every sentence of the reply has
+    ALREADY been handed to `speech_queue.enqueue()` as it was
+    generated — this just waits for whatever's still playing/queued
+    to finish (speech_queue.close()) and does NOT speak spoken_text
+    again, which would say the whole reply a second time.
+
+    Otherwise (the offline Ollama path, or a streaming attempt that
+    fell back) nothing has been spoken yet — speech_queue.close() is
+    then a harmless no-op (nothing was ever enqueued) and we fall
+    back to speaking the whole reply the plain, non-streaming way,
+    exactly like before streaming TTS existed.
+    """
+    speech_queue.close()
+    if not result.get("streamed"):
+        _speak_reply(spoken_text)
 
 
 def _record_exchange(conversation_history, user_text, spoken_text):
@@ -414,9 +566,16 @@ def _speak_reply(spoken_text):
         tts.speak(spoken_text)
 
 
-def _run_actions(actions, config):
+def _run_actions(actions, config, profile=None):
     """
     Execute any actions the AI returned (open apps, search, etc.).
+
+    profile : dict or None
+        The active personalization profile (see core/profile.py) —
+        passed straight through to action_router.execute_actions()
+        so contact nicknames ("Mom") and preferred-app aliases
+        ("email") in the actions' params get resolved before
+        dispatch. None skips resolution entirely.
 
     RETURNS
     -------
@@ -432,7 +591,7 @@ def _run_actions(actions, config):
     # decides WHICH action handler to call based on the action
     # name.
     from core import action_router
-    return action_router.execute_actions(actions, config)
+    return action_router.execute_actions(actions, config, profile=profile)
 
 
 def _handle_action_results(action_results, conversation_history):

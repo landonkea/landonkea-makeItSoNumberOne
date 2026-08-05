@@ -126,7 +126,8 @@ def get_system_prompt():
 
 # ── process_with_ai() — Main entry point (used by make_it_so.py) ──
 # Tries online first, falls back to offline if online fails.
-def process_with_ai(user_text, config, conversation_history=None):
+def process_with_ai(user_text, config, conversation_history=None,
+                     on_sentence=None):
     """
     Try Claude (online) first, then Ollama (offline) if needed.
 
@@ -140,12 +141,27 @@ def process_with_ai(user_text, config, conversation_history=None):
     conversation_history : list of dict or None
         Previous exchanges, each like {"role": "user"/"assistant",
         "content": "..."}, so the AI can remember earlier turns.
+    on_sentence : callable or None
+        Optional callback: on_sentence(sentence_text). When provided
+        AND the online Claude path is used, it's called once per
+        COMPLETE sentence of the spoken reply as soon as that
+        sentence is ready — while the rest of the reply may still be
+        generating — so a caller can start speaking it immediately
+        (see core/tts.py's SpeechQueue). If the result dict's
+        "streamed" key comes back True, every sentence of
+        "spoken_text" has already been delivered via on_sentence and
+        the caller should NOT speak spoken_text again itself.
+        Ignored (never called) for the offline Ollama path, which
+        doesn't support streaming — see process_with_ollama().
 
     RETURNS
     -------
     dict or None
-        {"spoken_text": str, "actions": list} on success, or None if
-        every available AI backend failed.
+        {"spoken_text": str, "actions": list, "streamed": bool} on
+        success, or None if every available AI backend failed.
+        "streamed" is always present; it's False whenever
+        on_sentence wasn't used (no callback given, or the offline
+        path was used).
     """
     # `.get("mode", "auto")` reads the "mode" setting from config, or
     # defaults to "auto" (try online, fall back to offline) if the
@@ -158,10 +174,16 @@ def process_with_ai(user_text, config, conversation_history=None):
     # point calling Claude's API with an empty key, it would just
     # fail every time.
     if mode in ("auto", "online") and api_key:
-        result = process_with_claude(user_text, config, conversation_history)
+        if on_sentence is not None:
+            result = process_with_claude_streaming(
+                user_text, config, conversation_history, on_sentence
+            )
+        else:
+            result = process_with_claude(user_text, config, conversation_history)
         # A non-None result means Claude answered successfully —
         # we're done, no need to try the offline model too.
         if result is not None:
+            result.setdefault("streamed", False)
             return result
         # If the user explicitly locked the mode to "online" (not
         # "auto"), we respect that choice and do NOT silently fall
@@ -176,9 +198,16 @@ def process_with_ai(user_text, config, conversation_history=None):
 
     # Offline fallback (Ollama). We reach this line either because
     # mode is "offline" outright, or because "auto" mode's online
-    # attempt above failed and fell through.
+    # attempt above failed and fell through. Ollama has no streaming
+    # support here (see process_with_ollama()'s "stream": False), so
+    # on_sentence is never called for this path — the caller falls
+    # back to speaking the whole "spoken_text" itself once we return,
+    # exactly like before streaming TTS existed.
     print("  [ai] Using offline AI (Ollama)...")
-    return process_with_ollama(user_text, config, conversation_history)
+    result = process_with_ollama(user_text, config, conversation_history)
+    if result is not None:
+        result.setdefault("streamed", False)
+    return result
 
 
 # ── process_with_claude() — Online: uses Anthropic's Claude API ──
@@ -273,6 +302,239 @@ def _extract_claude_text(response_json):
         if block.get("type") == "text":
             return block.get("text", "")
     return ""
+
+
+# ── process_with_claude_streaming() — streaming TTS entry point ──
+def process_with_claude_streaming(user_text, config, conversation_history=None,
+                                   on_sentence=None):
+    """
+    Like process_with_claude(), but reads Claude's reply as an SSE
+    (server-sent events) stream and calls on_sentence(text) for each
+    complete sentence of the "response" field as soon as it's ready
+    — instead of waiting for the whole JSON reply, actions and all,
+    to finish generating first.
+
+    WHY THIS IS SAFE TO STREAM
+    ---------------------------
+    The system prompt (_JSON_FORMAT_ADDENDUM) always asks the model
+    for {"response": "<spoken text>", "actions": [...]} with
+    "response" first. _JSONResponseFieldExtractor below watches the
+    raw text stream for that field's string value character by
+    character (handling JSON escapes) and hands decoded characters to
+    a SentenceSplitter, which only releases a sentence once it's sure
+    where it ends (see core/sentence_splitter.py) — abbreviations,
+    decimals, etc. This means on_sentence() sees the same sentences
+    a full-text parse would produce, just earlier.
+
+    Once the stream finishes, we still run the FULL buffered reply
+    through the normal _parse_response() so "actions" (which arrive
+    LAST in the JSON and can't be acted on until they're complete
+    anyway) come back exactly as they would from the non-streaming
+    path.
+
+    RETURNS
+    -------
+    dict or None
+        Same shape as process_with_claude(), plus "streamed": True.
+        Returns None ONLY if the request failed before ANY text
+        streamed back (bad key, network error, non-200 status) — at
+        that point nothing has been spoken yet, so the caller can
+        safely retry with the plain non-streaming path. If the
+        connection drops PARTWAY through, we do not return None
+        (some sentences may already have been spoken via
+        on_sentence — losing that result would leave the caller with
+        no record of what the user already heard), we instead return
+        best-effort results from whatever text arrived.
+    """
+    api_key = config.get("anthropic_api_key", "")
+    if not api_key:
+        print("  [ai] No Anthropic API key found in config.yaml.")
+        return None
+    if on_sentence is None:
+        # Nobody wants sentences as they arrive — the plain
+        # non-streaming call is simpler and behaves identically for
+        # the final result.
+        return process_with_claude(user_text, config, conversation_history)
+
+    messages = _build_claude_messages(user_text, conversation_history)
+    print("  [ai] Sending to Claude API (streaming)...")
+
+    field_extractor = _JSONResponseFieldExtractor("response")
+    splitter = SentenceSplitter()
+    full_text_parts = []
+    any_text_received = False
+
+    try:
+        requests = _import_requests()
+        response = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json"
+            },
+            json={
+                "model": "claude-sonnet-4-20250514",
+                "max_tokens": 1024,
+                "system": get_system_prompt(),
+                "messages": messages,
+                "temperature": 0.7,
+                "stream": True
+            },
+            timeout=30,
+            stream=True
+        )
+        try:
+            if response.status_code != 200:
+                print(f"  [ai] Claude error: {response.status_code}")
+                return None
+
+            for raw_line in response.iter_lines(decode_unicode=True):
+                if not raw_line or not raw_line.startswith("data:"):
+                    continue
+                payload = raw_line[len("data:"):].strip()
+                if not payload:
+                    continue
+                try:
+                    event = json.loads(payload)
+                except json.JSONDecodeError:
+                    continue
+                if event.get("type") != "content_block_delta":
+                    continue
+                delta = event.get("delta", {})
+                if delta.get("type") != "text_delta":
+                    continue
+                text_piece = delta.get("text", "")
+                if not text_piece:
+                    continue
+                any_text_received = True
+                full_text_parts.append(text_piece)
+                new_field_text = field_extractor.feed(text_piece)
+                if new_field_text:
+                    for sentence in splitter.feed(new_field_text):
+                        on_sentence(sentence)
+        finally:
+            response.close()
+
+        for sentence in splitter.flush():
+            on_sentence(sentence)
+
+    except Exception as e:
+        print(f"  [ai] Claude streaming error: {e}")
+        if not any_text_received:
+            # Nothing was ever spoken — safe for the caller to retry
+            # with the ordinary non-streaming path instead.
+            return None
+        # Some sentences may already have been spoken. Fall through
+        # and do our best with whatever text we did get, rather than
+        # discarding it.
+
+    full_response = "".join(full_text_parts)
+    if not full_response:
+        return None
+    result = _parse_response(full_response)
+    result["streamed"] = True
+    return result
+
+
+class _JSONResponseFieldExtractor:
+    """
+    Incrementally pulls the decoded string VALUE of one field (by
+    default "response") out of a streaming JSON object shaped like
+    {"response": "text...", "actions": [...]} — without needing the
+    whole JSON object to have arrived yet.
+
+    This is deliberately narrow — not a general JSON streaming
+    parser — it only needs to handle the exact shape our system
+    prompt asks the model for: a flat object with a "response"
+    string field. It DOES fully handle JSON string escapes (\\",
+    \\\\, \\n, \\t, \\uXXXX, etc.) since Claude's replies routinely
+    contain escaped quotes.
+    """
+
+    _SEEK_KEY = "seek_key"
+    _SEEK_COLON = "seek_colon"
+    _SEEK_QUOTE = "seek_quote"
+    _IN_STRING = "in_string"
+    _DONE = "done"
+
+    _SIMPLE_ESCAPES = {
+        '"': '"', "\\": "\\", "/": "/", "n": "\n",
+        "t": "\t", "r": "\r", "b": "\b", "f": "\f",
+    }
+
+    def __init__(self, field_name="response"):
+        self._needle = f'"{field_name}"'
+        self._scan_tail = ""
+        self._state = self._SEEK_KEY
+        self._pending_escape = False
+        self._unicode_digits = None
+
+    def feed(self, chunk):
+        """
+        Feed a chunk of raw streamed JSON text. Returns a string of
+        any newly-decoded characters of the target field's value
+        (possibly "" if this chunk didn't complete any).
+        """
+        out = []
+        for ch in chunk:
+            if self._state == self._DONE:
+                break
+            if self._state == self._SEEK_KEY:
+                self._scan_tail += ch
+                if len(self._scan_tail) > len(self._needle):
+                    self._scan_tail = self._scan_tail[-len(self._needle):]
+                if self._scan_tail == self._needle:
+                    self._state = self._SEEK_COLON
+                    self._scan_tail = ""
+            elif self._state == self._SEEK_COLON:
+                if ch == ":":
+                    self._state = self._SEEK_QUOTE
+            elif self._state == self._SEEK_QUOTE:
+                if ch == '"':
+                    self._state = self._IN_STRING
+                # Any whitespace between ':' and the opening quote is
+                # simply skipped; anything else would mean the field
+                # isn't a string, which shouldn't happen given our
+                # system prompt — we just stay in this state rather
+                # than crashing.
+            elif self._state == self._IN_STRING:
+                decoded = self._consume_string_char(ch)
+                if decoded is not None:
+                    out.append(decoded)
+        return "".join(out)
+
+    def _consume_string_char(self, ch):
+        if self._unicode_digits is not None:
+            self._unicode_digits += ch
+            if len(self._unicode_digits) == 4:
+                digits = self._unicode_digits
+                self._unicode_digits = None
+                try:
+                    return chr(int(digits, 16))
+                except ValueError:
+                    return None
+            return None
+
+        if self._pending_escape:
+            self._pending_escape = False
+            if ch in self._SIMPLE_ESCAPES:
+                return self._SIMPLE_ESCAPES[ch]
+            if ch == "u":
+                self._unicode_digits = ""
+                return None
+            # Unknown escape sequence — emit the character literally
+            # rather than silently dropping it.
+            return ch
+
+        if ch == "\\":
+            self._pending_escape = True
+            return None
+        if ch == '"':
+            # Unescaped quote ends the string value.
+            self._state = self._DONE
+            return None
+        return ch
 
 
 def _import_requests():

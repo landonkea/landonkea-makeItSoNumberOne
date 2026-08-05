@@ -29,6 +29,103 @@ import subprocess
 # directly here, but it's available if we ever need to save audio
 # to a temporary file before playing it.
 import tempfile
+# "queue" and "threading" back SpeechQueue below, which plays queued
+# sentences on a dedicated background thread so streaming TTS can
+# hand off sentences one at a time as they're generated, while a
+# single worker speaks them strictly in order.
+import queue
+import threading
+
+
+# A private sentinel object used to tell SpeechQueue's worker thread
+# "there's nothing more coming, stop." A plain string like "" won't
+# do — it could collide with a legitimate (if useless) queued item —
+# so we use a unique object() whose only property that matters is
+# that it's `is`-comparable and nothing else will ever equal it.
+_STOP = object()
+
+
+class SpeechQueue:
+    """
+    Plays sentences of text aloud strictly in the order they were
+    enqueued, one at a time, on a single background worker thread.
+
+    WHY THIS EXISTS
+    ----------------
+    Streaming TTS hands sentences to us one at a time as soon as each
+    one is ready (see core/ai.py's streaming Claude path) — but the
+    AI might finish generating sentence 2 before sentence 1 has
+    finished being spoken. This class is the thing that guarantees:
+      - sentences are always spoken in the order they were enqueued
+        (never out of order, no matter how fast/slow they arrive),
+      - only one sentence plays at a time (no overlapping audio),
+      - and there's no gap-causing round-trip back to whatever
+        produced the text — the moment one sentence finishes, the
+        next one (if already queued) starts immediately.
+
+    A single background thread pulling from a queue.Queue gives us
+    all three for free: queue.Queue is already FIFO and thread-safe,
+    and because only one worker thread ever calls speak_fn, two
+    sentences physically cannot play at once.
+
+    `speak_fn` defaults to this module's speak() (which really talks
+    to the OS), but tests inject a fake no-audio function instead so
+    the ordering/queueing logic can be verified without a speaker.
+    """
+
+    def __init__(self, speak_fn=None):
+        self._speak_fn = speak_fn or speak
+        self._queue = queue.Queue()
+        self._thread = threading.Thread(target=self._worker, daemon=True)
+        self._started = False
+
+    def start(self):
+        """Start the background worker thread. Safe to call once;
+        enqueue() also calls this automatically if needed."""
+        if not self._started:
+            self._started = True
+            self._thread.start()
+
+    def enqueue(self, text):
+        """Add a sentence to be spoken. Returns immediately — the
+        actual speaking happens on the worker thread. Blank/empty
+        text is silently ignored (nothing useful to speak)."""
+        if not text or not text.strip():
+            return
+        self.start()
+        self._queue.put(text)
+
+    def wait_done(self):
+        """Block until every sentence enqueued so far has finished
+        being spoken (does NOT stop the worker — more can still be
+        enqueued afterward)."""
+        self._queue.join()
+
+    def close(self, timeout=30):
+        """Wait for everything queued to finish speaking, then stop
+        the worker thread. Call this once no more sentences for this
+        turn will be enqueued."""
+        if not self._started:
+            return
+        self.wait_done()
+        self._queue.put(_STOP)
+        self._thread.join(timeout=timeout)
+
+    def _worker(self):
+        while True:
+            item = self._queue.get()
+            try:
+                if item is _STOP:
+                    return
+                try:
+                    self._speak_fn(item)
+                except Exception as e:
+                    # A single bad sentence (e.g. a transient TTS
+                    # engine hiccup) shouldn't take down the rest of
+                    # the queue — log it and keep going.
+                    print(f"  [tts] Error speaking queued sentence: {e}")
+            finally:
+                self._queue.task_done()
 
 
 # Define a function called "speak" that takes one argument: "text",

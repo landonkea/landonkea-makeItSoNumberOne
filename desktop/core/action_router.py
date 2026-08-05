@@ -79,7 +79,7 @@ REGISTRY = load_registry()
 # "action_dict" (a dictionary describing what to do) and "config"
 # (the app's settings). This function runs ONE action and returns
 # a message about whether it succeeded or failed.
-def execute_action(action_dict, config, registry=None):
+def execute_action(action_dict, config, registry=None, profile=None):
     """
     Execute a single action returned by Claude.
 
@@ -96,6 +96,14 @@ def execute_action(action_dict, config, registry=None):
         discovered in desktop/plugins/ at import time). Tests pass
         their own registry here to exercise a specific plugin set
         without touching the real one.
+    profile : dict, optional
+        The active personalization profile (see core/profile.py:
+        get_active_profile()). If given, contact nicknames and
+        preferred-app aliases in `action_dict`'s params are resolved
+        against it BEFORE dispatch (e.g. an action with
+        params={"number": "Mom"} becomes params={"number": "+1..."}).
+        None (the default) skips resolution entirely, e.g. for
+        callers/tests that don't use profiles.
 
     RETURNS
     -------
@@ -104,6 +112,10 @@ def execute_action(action_dict, config, registry=None):
         None if the action type is unknown.
     """
     registry = REGISTRY if registry is None else registry
+
+    if profile:
+        from . import profile as profile_module
+        action_dict = profile_module.resolve_action_params(action_dict, profile)
 
     # Extract the "action" field from the action dictionary (e.g.,
     # "open_app", "search_web"). .get() returns an empty string if
@@ -141,7 +153,7 @@ def execute_action(action_dict, config, registry=None):
 # two arguments: "action_list" (a list of action dictionaries) and
 # "config". This function runs MULTIPLE actions in sequence (one
 # after another) and returns all the results as a list.
-def execute_actions(action_list, config, registry=None):
+def execute_actions(action_list, config, registry=None, profile=None):
     """
     Execute a list of actions returned by Claude.
 
@@ -153,6 +165,10 @@ def execute_actions(action_list, config, registry=None):
         The app configuration.
     registry : dict, optional
         See execute_action() — defaults to the module-level REGISTRY.
+    profile : dict, optional
+        See execute_action() — the active personalization profile
+        used to resolve contact nicknames / preferred-app aliases in
+        each action's params before dispatch.
 
     RETURNS
     -------
@@ -196,7 +212,7 @@ def execute_actions(action_list, config, registry=None):
         # sink the batch" guarantee applies to plugins as to any
         # built-in action.
         try:
-            result = execute_action(action, config, registry=registry)
+            result = execute_action(action, config, registry=registry, profile=profile)
         except Exception as e:
             print(f"  [router]   -> Action failed: {e}")
             result = f"Error: {e}"

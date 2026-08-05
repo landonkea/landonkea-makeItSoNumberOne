@@ -30,6 +30,11 @@ desktop/conversation_history.json
 # .example.yaml template instead) ──
 desktop/routines.yaml
 
+# ── Personalization profile(s) (local — name, preferred apps,
+# contact nicknames/phone numbers; never commit; ship the
+# .example.yaml template instead) ──
+desktop/profile.yaml
+
 # ── Third-party action plugins (local, user-supplied Python — may
 # contain anything from personal automations to accidental secrets;
 # never commit. desktop/plugins/examples/ is the documented template

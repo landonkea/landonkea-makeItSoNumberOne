@@ -1,0 +1,57 @@
+# ── profile.example.yaml — copy to profile.yaml and fill in your own ──
+# Personalization data: your name, preferred apps, and contact
+# nicknames. Unlike config.yaml (API keys) or routines.yaml (canned
+# macros anyone on the device benefits from), this is personal data —
+# profile.yaml is gitignored, this .example file is the only thing
+# tracked in git. See core/profile.py for the full design writeup
+# (what's per-profile vs. shared across profiles, and why).
+#
+# SIMPLEST SETUP (one person, one profile): delete the
+# "active_profile:"/"profiles:" wrapper below and just use the fields
+# directly at the top level, e.g.:
+#
+#   name: "Landon"
+#   preferred_apps:
+#     email: "Mail"
+#   contacts:
+#     mom: "+15555550123"
+#
+# MULTI-PROFILE SETUP (this file, for households / shared devices):
+
+# Which profile is active when the assistant starts. Can be changed
+# for the rest of the running session with a voice command like
+# "Computer, switch to Guest's profile" — see
+# core/profile.py:detect_profile_switch_request().
+active_profile: "landon"
+
+profiles:
+  landon:
+    # What Claude/Ollama can refer to you as, and what a future
+    # personalized greeting would use.
+    name: "Landon"
+
+    # Category -> the app you actually mean when you say "open my
+    # email" / "open my browser" / etc. Only used by the "open_app"
+    # action today (see core/profile.py:resolve_action_params()).
+    preferred_apps:
+      email: "Mail"
+      browser: "Safari"
+      music: "Spotify"
+
+    # Nickname -> a real contact identifier (phone number, etc).
+    # Resolved automatically before any action with a "number"/"to"/
+    # "contact"/"recipient" param reaches that action — e.g. "text
+    # Mom I'll be late" resolves "Mom" to the number below instead of
+    # needing you to say a phone number out loud. NOTE: send_sms/
+    # make_call are Android/iOS-only actions today (no telephony on
+    # desktop) — see core/profile.py's resolve_action_params()
+    # docstring for why this is necessarily a per-platform resolution
+    # for those two specific actions.
+    contacts:
+      mom: "+15555550123"
+      dad: "+15555550456"
+
+  guest:
+    name: "Guest"
+    preferred_apps: {}
+    contacts: {}
