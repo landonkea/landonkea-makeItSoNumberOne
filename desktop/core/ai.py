@@ -19,6 +19,12 @@ import os
 # prompt and replies in the old shape anyway.
 import re
 
+# Pure sentence-boundary logic used by the streaming Claude path
+# below (see process_with_claude_streaming()) to hand complete
+# sentences to a caller-supplied callback as soon as each one is
+# ready, instead of waiting for the whole reply to finish.
+from core.sentence_splitter import SentenceSplitter
+
 
 # ── get_system_prompt() — Loads the Star Trek personality prompt ──
 # This is the same across ALL platforms and ALL modes.
@@ -195,11 +201,7 @@ def process_with_claude(user_text, config, conversation_history=None):
 
     print("  [ai] Sending to Claude API...")
     try:
-        # Imported here, not at the top of the file, so that a
-        # machine without the `requests` library installed can still
-        # import this whole module (and use the offline Ollama path)
-        # without crashing at startup.
-        import requests
+        requests = _import_requests()
         response = requests.post(
             "https://api.anthropic.com/v1/messages",
             headers={
@@ -273,6 +275,171 @@ def _extract_claude_text(response_json):
     return ""
 
 
+def _import_requests():
+    """
+    Imported lazily (not at module load time) so a machine without
+    the `requests` library installed can still import this whole
+    module — e.g. to use _is_ollama_running()'s urllib-based
+    reachability check — without crashing at startup. Split into its
+    own function (mirroring core/actions/integrations.py's pattern)
+    so tests can monkeypatch just this one function to inject a fake
+    `requests` module instead of touching the real network.
+    """
+    import requests
+    return requests
+
+
+_OLLAMA_BASE_URL = "http://localhost:11434"
+
+
+# ── Model capability hints ────────────────────────────────────────
+# Deliberately NOT a full capability-detection system — just a small,
+# config-overridable lookup table so callers can make a reasonable
+# guess about context-window size (and whether a model is a "small,
+# fast" or "larger, smarter" one) without querying anything extra.
+# Unknown models fall back to a conservative default rather than
+# guessing wrong.
+_KNOWN_MODEL_CAPABILITIES = {
+    "llama3.2:1b": {"context_window": 128000, "size_class": "small"},
+    "llama3.2": {"context_window": 128000, "size_class": "small"},
+    "llama3.1": {"context_window": 128000, "size_class": "large"},
+    "llama3": {"context_window": 8192, "size_class": "medium"},
+    "mistral": {"context_window": 32000, "size_class": "medium"},
+    "phi3": {"context_window": 128000, "size_class": "small"},
+    "qwen2.5": {"context_window": 128000, "size_class": "medium"},
+    "gemma2": {"context_window": 8192, "size_class": "medium"},
+}
+_DEFAULT_MODEL_CAPABILITIES = {"context_window": 8192, "size_class": "unknown"}
+
+
+def get_model_capabilities(model, config=None):
+    """
+    Return a {"context_window": int, "size_class": str} hint for
+    `model`, used only for logging / lightweight prompt tuning — not
+    a claim about the model's real capabilities.
+
+    Lookup order: an explicit `ollama_context_window` override in
+    config.yaml, then an exact match on the model's full name
+    (including tag, e.g. "llama3.2:1b"), then a match on just the
+    name before any ":tag", then a generic default for anything we
+    don't recognize.
+    """
+    config = config or {}
+    base_name = model.split(":")[0]
+    info = dict(
+        _KNOWN_MODEL_CAPABILITIES.get(
+            model,
+            _KNOWN_MODEL_CAPABILITIES.get(base_name, _DEFAULT_MODEL_CAPABILITIES),
+        )
+    )
+    override = config.get("ollama_context_window")
+    if isinstance(override, int) and override > 0:
+        info["context_window"] = override
+    return info
+
+
+# ── Model listing / pulling ───────────────────────────────────────
+def list_ollama_models(timeout_seconds=5):
+    """
+    Return the list of model names currently available in the local
+    Ollama installation — the same information `ollama list` shows —
+    by calling Ollama's REST API GET /api/tags.
+
+    Returns [] (never raises) on any failure: Ollama not running,
+    network error, unexpected JSON shape. Callers can treat "no
+    models" and "couldn't check" the same way without extra
+    try/except of their own.
+    """
+    try:
+        requests = _import_requests()
+        response = requests.get(
+            f"{_OLLAMA_BASE_URL}/api/tags", timeout=timeout_seconds
+        )
+        if response.status_code != 200:
+            print(f"  [ai] Ollama /api/tags error: {response.status_code}")
+            return []
+        data = response.json()
+        models = data.get("models", [])
+        return [m["name"] for m in models if isinstance(m, dict) and m.get("name")]
+    except Exception as e:
+        print(f"  [ai] Could not list local Ollama models: {e}")
+        return []
+
+
+def is_model_available(model, timeout_seconds=5):
+    """
+    Check whether `model` is already pulled locally.
+
+    Ollama tags an untagged name to ":latest" internally, so
+    "llama3.2" and "llama3.2:latest" refer to the same local model —
+    we treat those as equivalent instead of requiring an exact string
+    match, which would otherwise report a false "not available" for
+    the (very common) case of a config value with no explicit tag.
+    """
+    available = list_ollama_models(timeout_seconds=timeout_seconds)
+    if model in available:
+        return True
+    if ":" not in model and f"{model}:latest" in available:
+        return True
+    if model.endswith(":latest") and model[: -len(":latest")] in available:
+        return True
+    return False
+
+
+def pull_model(model, timeout_seconds=1800):
+    """
+    Trigger `ollama pull <model>` via Ollama's REST API
+    (POST /api/pull).
+
+    This can take anywhere from a few seconds to many minutes
+    depending on the model's size and the connection speed — larger
+    models are several GB — so we print clear before/after feedback
+    rather than blocking silently. The request itself blocks until
+    the pull finishes (stream: False) since we have no caller today
+    that needs incremental progress; `timeout_seconds` defaults to
+    30 minutes to give big models room to finish.
+
+    Returns True on success, False on any failure (bad status,
+    reported error, network problem, timeout).
+    """
+    print(f"  [ai] Model '{model}' not found locally — pulling it now.")
+    print("  [ai] This can take several minutes for larger models. "
+          "Please be patient...")
+    try:
+        requests = _import_requests()
+        response = requests.post(
+            f"{_OLLAMA_BASE_URL}/api/pull",
+            json={"name": model, "stream": False},
+            timeout=timeout_seconds,
+        )
+        if response.status_code != 200:
+            print(f"  [ai] Ollama pull error: {response.status_code}")
+            return False
+        result = response.json()
+        status = str(result.get("status", ""))
+        if "error" in status.lower():
+            print(f"  [ai] Ollama pull failed: {status}")
+            return False
+        print(f"  [ai] Model '{model}' pulled successfully.")
+        return True
+    except Exception as e:
+        print(f"  [ai] Ollama pull error: {e}")
+        return False
+
+
+def ensure_model_available(model, timeout_seconds=5, pull_timeout_seconds=1800):
+    """
+    Make sure `model` is available locally, pulling it via
+    pull_model() if it isn't yet.
+
+    Returns True if the model is (now) available, False if it
+    couldn't be confirmed available and the pull attempt also failed.
+    """
+    if is_model_available(model, timeout_seconds=timeout_seconds):
+        return True
+    return pull_model(model, timeout_seconds=pull_timeout_seconds)
+
+
 # ── process_with_ollama() — Offline: uses Ollama + Llama on your PC ──
 # Ollama is a FREE program that runs AI models locally on your
 # computer. It exposes an HTTP API at http://localhost:11434.
@@ -298,13 +465,40 @@ def process_with_ollama(user_text, config, conversation_history=None):
     # The user can specify a model name in config.yaml, or we
     # default to "llama3.2" (good balance of speed and intelligence).
     model = config.get("ollama_model", "llama3.2")
+
+    if not is_model_available(model):
+        if config.get("ollama_auto_pull", False):
+            # Opt-in only: a pull can take many minutes, which would
+            # otherwise silently stall the voice assistant the first
+            # time someone speaks to it after changing ollama_model.
+            # We already know the model is missing (just checked
+            # above), so pull directly rather than going through
+            # ensure_model_available() and re-checking availability a
+            # second time.
+            if not pull_model(model):
+                print(f"  [ai] Could not make model '{model}' available "
+                      "— giving up on this offline request.")
+                return None
+        else:
+            print(f"  [ai] Configured Ollama model '{model}' isn't "
+                  "pulled locally yet.")
+            print(f"  [ai]   Run: ollama pull {model}")
+            print("  [ai]   (or set ollama_auto_pull: true in config.yaml "
+                  "to pull it automatically next time)")
+            # Fall through and try anyway — Ollama may still know how
+            # to resolve the name (e.g. a registry alias), and if not
+            # it'll fail with a clear error from the API itself below.
+
+    capabilities = get_model_capabilities(model, config)
     conversation_text = _build_ollama_prompt(user_text, conversation_history)
 
-    print(f"  [ai] Sending to local Ollama (model: {model})...")
+    print(f"  [ai] Sending to local Ollama (model: {model}, "
+          f"~{capabilities['size_class']}, "
+          f"context window ~{capabilities['context_window']} tokens)...")
     try:
-        import requests
+        requests = _import_requests()
         response = requests.post(
-            "http://localhost:11434/api/generate",
+            f"{_OLLAMA_BASE_URL}/api/generate",
             json={
                 "model": model,
                 "prompt": conversation_text,

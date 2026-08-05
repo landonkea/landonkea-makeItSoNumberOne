@@ -134,6 +134,39 @@ Set `mode: "online"`, `"offline"`, or `"auto"` (tries online first, falls back t
 (`ollama pull llama3.2`) and a [Vosk](https://alphacephei.com/vosk/models) model downloaded
 to `desktop/models/`.
 
+#### Configuring the local LLM fallback (Ollama)
+
+`ollama_model` in `config.yaml` picks which locally-installed model the offline fallback
+talks to — it's not hardcoded, so you can point it at anything you've pulled with Ollama
+(`llama3.2`, `llama3.2:1b`, `llama3.1`, `mistral`, etc). Smaller models answer faster and use
+less RAM; larger ones tend to follow instructions (and the JSON output format) more reliably.
+
+By default, if the configured model isn't pulled locally yet, `core/ai.py` logs a clear
+warning with the exact `ollama pull <model>` command to run, then still attempts the request
+(Ollama may resolve it anyway). Set `ollama_auto_pull: true` in `config.yaml` to have it run
+the pull automatically the first time it's needed instead — expect the assistant to be
+unresponsive for that first request, since pulling a multi-GB model can take several minutes;
+progress is logged to the console as it happens.
+
+`core/ai.py` exposes a few helpers around this, usable directly (e.g. from `text_mode.py` or
+a small setup script) if you want to manage models yourself:
+
+- `list_ollama_models()` — the models currently available locally (like `ollama list`), via
+  Ollama's `GET /api/tags`. Returns `[]` if Ollama isn't running rather than raising.
+- `is_model_available(model)` — whether a given model name is already pulled (tag-aware:
+  `"llama3.2"` and `"llama3.2:latest"` count as the same model).
+- `pull_model(model)` — triggers `ollama pull <model>` via `POST /api/pull` and blocks until
+  it finishes, printing before/after progress messages.
+- `ensure_model_available(model)` — checks first, only pulls if missing.
+- `get_model_capabilities(model)` — a small, config-overridable hint (`context_window`,
+  `size_class`) for a handful of well-known model names, used for logging — not a full
+  capability-detection system. Override the context-window guess for any model with
+  `ollama_context_window: <tokens>` in `config.yaml`.
+
+If Ollama itself isn't reachable at all (not installed, or not running — connection refused),
+`process_with_ollama()` prints setup instructions and returns `None` so `process_with_ai()`
+can report the failure cleanly instead of hanging or crashing.
+
 To build a standalone binary (`.exe` / `.app`) instead of running from source:
 
 ```bash

@@ -28,6 +28,20 @@ porcupine_access_key: ""
 # Bigger = smarter: "llama3.1" (4.7GB), "mistral" (4.1GB)
 ollama_model: "llama3.2"
 
+# If the model above isn't pulled locally yet, the assistant normally
+# just logs a warning + the `ollama pull ...` command to run and
+# tries the request anyway. Set this to true to have it run the pull
+# automatically instead the first time it's needed (can take several
+# minutes for larger models — the assistant will be unresponsive
+# during that first pull).
+ollama_auto_pull: false
+
+# Optional: override the context-window-size hint (in tokens) used
+# for logging/prompt tuning when talking to ollama_model. Leave unset
+# to use the built-in guess for well-known model names (see
+# core/ai.py's get_model_capabilities()).
+# ollama_context_window: 128000
+
 # ── VOICE SETTINGS ──────────────────────────────────────────────
 tts:
   voice: "Samantha"
