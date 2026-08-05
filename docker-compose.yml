@@ -43,3 +43,57 @@ services:
     #
     # By default conversation history just lives in the container's
     # own filesystem and resets each `docker compose run`.
+
+  # ───────────────────────────────────────────────────────────────
+  # desktop-voice-linux — REAL voice mode (wake word + mic + speaker)
+  # ───────────────────────────────────────────────────────────────
+  # LINUX HOSTS ONLY. Docker containers don't have their own audio
+  # hardware -- this service passes the HOST's real ALSA device
+  # nodes into the container so pyaudio/pvporcupine (imported lazily
+  # by core/audio.py and core/wake_word.py) can actually open a mic
+  # and speaker, running the real make_it_so.py voice loop instead
+  # of text_mode.py's stdin/stdout REPL.
+  #
+  # THIS DOES NOT WORK ON DOCKER DESKTOP FOR MAC OR WINDOWS. Both run
+  # containers inside a lightweight Linux VM with no bridge from that
+  # VM to the host's real audio system (no CoreAudio passthrough on
+  # Mac, no WASAPI passthrough on Windows) -- there is no Docker flag
+  # or workaround for this, it's an architectural gap in Docker
+  # Desktop itself, not something this compose file can fix. On Mac/
+  # Windows, run make_it_so.py natively instead (see README.md), or
+  # use the `desktop` service above for text-mode-in-a-container.
+  #
+  # QUICK START (on a real Linux host with a mic/speaker attached)
+  # -----------------------------------------------------------------
+  #   cp .env.example .env        # fill in your API key(s) + PORCUPINE_ACCESS_KEY
+  #   docker compose run --rm desktop-voice-linux
+  #
+  # If you get "Permission denied" opening the audio device, your
+  # user's `audio` group GID on the host may not match the container's
+  # -- either add your host user to the `audio` group, or set
+  # `group_add: ["<your host audio GID>"]` below.
+  desktop-voice-linux:
+    build:
+      context: .
+      dockerfile: desktop/Dockerfile
+    image: make-it-so-desktop
+    command: ["python3", "make_it_so.py"]
+    stdin_open: true
+    tty: true
+    env_file:
+      - path: .env
+        required: false
+    # ALSA device nodes -- the actual audio hardware. This is the
+    # real passthrough; PulseAudio (if the host uses it) sits on top
+    # of ALSA, so most PulseAudio-based desktops still work via this
+    # same /dev/snd bind mount without any extra PulseAudio-specific
+    # socket wiring.
+    devices:
+      - /dev/snd:/dev/snd
+    # Grants the container process membership in the host's "audio"
+    # group so it can actually read/write those device nodes -- on
+    # most distros /dev/snd/* is group-owned by "audio", not
+    # world-writable. If this GID differs on your host, override it:
+    # run `getent group audio` on the host and put that GID here.
+    group_add:
+      - audio

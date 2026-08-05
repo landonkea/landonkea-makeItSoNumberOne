@@ -190,9 +190,10 @@ This is useful for:
   every push).
 - Headless/server use, or local development on a machine without a mic hooked up.
 
-**Voice mode (wake word + microphone + speaker) requires running `make_it_so.py` natively on
-real hardware — it is not, and cannot be, containerized.** Android and iOS are native mobile
-apps and can't be containerized either; this Docker setup only ever applies to `desktop/`.
+**Voice mode (wake word + microphone + speaker) needs real audio hardware passed into the
+container — see "Voice mode in Docker (Linux only)" below for how, and why it's Linux-specific.**
+Android and iOS are native mobile apps and can't be containerized either way; this Docker setup
+only ever applies to `desktop/`.
 
 ```bash
 cp .env.example .env
@@ -212,6 +213,31 @@ To build/run without Compose:
 docker build -f desktop/Dockerfile -t make-it-so-desktop .   # from the repo root
 docker run --rm -it --env-file .env make-it-so-desktop
 ```
+
+#### Voice mode in Docker (Linux only)
+
+On a real Linux host, the container CAN get real microphone/speaker access — Docker just
+needs the host's actual audio device nodes passed in, since a container has no audio hardware
+of its own. The `desktop-voice-linux` service in `docker-compose.yml` does this: it bind-mounts
+`/dev/snd` (ALSA) into the container and runs `make_it_so.py` (the real voice loop) instead of
+`text_mode.py`.
+
+```bash
+cp .env.example .env   # fill in API key(s) + PORCUPINE_ACCESS_KEY (needed for wake word)
+docker compose run --rm desktop-voice-linux
+```
+
+If you get "Permission denied" opening the audio device, your host user isn't in the `audio`
+group that owns `/dev/snd/*` on most distros — either add yourself to it (`sudo usermod -aG
+audio $USER`, then re-login) or set the matching GID via `group_add:` in `docker-compose.yml`
+(find it with `getent group audio` on the host).
+
+**This does not work on Docker Desktop for Mac or Windows.** Both run containers inside a
+lightweight Linux VM with no bridge from that VM to the host's real audio system — no CoreAudio
+passthrough on Mac, no WASAPI passthrough on Windows. There's no Docker flag or workaround for
+this; it's a gap in Docker Desktop's own architecture, not something fixable from this repo's
+side. On Mac/Windows, run `make_it_so.py` natively instead, or use the plain `desktop` service
+above for text-mode-in-a-container.
 
 ### Android (Kotlin)
 
