@@ -34,11 +34,22 @@ let package = Package(
             exclude: [
                 "MakeItSo.xcodeproj",
                 "Package.swift",
-                "Resources/Info.plist"
+                "Resources/Info.plist",
+                "Tests"
             ],
             resources: [
                 .process("Resources")
             ]
+        ),
+        // A separate, lower-risk build graph (see MakeItSo.xcodeproj's
+        // build target, which has no test target of its own) that proves
+        // SettingsStore.swift compiles standalone and exercises its pure
+        // resolveKey() logic plus real Keychain round-trips. Run with
+        // `swift test` from this directory.
+        .testTarget(
+            name: "MakeItSoTests",
+            dependencies: ["MakeItSo"],
+            path: "Tests/MakeItSoTests"
         )
     ]
 )

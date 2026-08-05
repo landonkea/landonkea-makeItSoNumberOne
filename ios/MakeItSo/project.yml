@@ -42,6 +42,8 @@ targets:
       - path: TTSService.swift
       - path: ActionRouter.swift
       - path: WakeWordService.swift
+      - path: SettingsStore.swift
+      - path: SettingsView.swift
       # The Resources folder holds the chime sound, system prompt,
       # and Info.plist — bundled into the app automatically.
       - path: Resources

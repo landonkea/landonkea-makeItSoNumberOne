@@ -69,14 +69,19 @@ class ClaudeService {
     // not to any specific instance). `shared` is the conventional name.
     static let shared = ClaudeService()
 
-    // Store the API key (a secret password that lets us use Claude).
-    // We read it from the device's environment variables (like a
-    // system-wide settings dictionary). ProcessInfo.processInfo gives
-    // us information about the running app, and .environment gives us
-    // the system environment variables. The ?? "" means "if there's no
-    // key, use an empty string instead of crashing". This is private
-    // so other parts of the app can't accidentally read our secret key.
-    private let apiKey = ProcessInfo.processInfo.environment["ANTHROPIC_API_KEY"] ?? ""
+    // The API key (a secret password that lets us use Claude). Resolved
+    // fresh via SettingsStore on every access (this is a computed
+    // property, not a stored `let`) so a key the user just saved in
+    // Settings (SettingsView.swift) takes effect on the very next
+    // request — no app restart needed. SettingsStore itself prefers the
+    // user's Keychain-saved value and falls back to the
+    // ANTHROPIC_API_KEY environment variable when nothing is saved,
+    // exactly like this property used to read the environment variable
+    // directly. This is private so other parts of the app can't
+    // accidentally read our secret key.
+    private var apiKey: String {
+        SettingsStore.getAnthropicApiKey()
+    }
 
     // Read the AI mode from environment variable. This controls whether
     // we use the online Claude API, the offline Ollama, or auto-fallback.

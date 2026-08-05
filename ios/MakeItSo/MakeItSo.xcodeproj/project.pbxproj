@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		18EE9C72DD189EEBADD71849 /* MakeItSoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 008B6F9C8D2A57D7CC1BBF98 /* MakeItSoApp.swift */; };
 		1BF315E33DC5140226DD96E9 /* SpeechManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61E9E9CD8D5CBF671178894E /* SpeechManager.swift */; };
+		1D36BEA8294469AC7EB2F2BB /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6803171B6A2960D357D15AE8 /* SettingsView.swift */; };
+		28B7E0EE55B3B048F70A6E3F /* SettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90F55795144AE95696FA1839 /* SettingsStore.swift */; };
 		3D07AB3E5D234F8FB61885D8 /* system_prompt.txt in Resources */ = {isa = PBXBuildFile; fileRef = 05526A64958956C9E98BC427 /* system_prompt.txt */; };
 		3E5283F28549F79508D26DF3 /* TTSService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84F9F8DEB8048D4453B4CD31 /* TTSService.swift */; };
 		4DE335BB69CF4478A56D5361 /* ActionRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 426A127FEAA27C6C6CB109C7 /* ActionRouter.swift */; };
@@ -27,9 +29,11 @@
 		2566E2C4EE49B86834713527 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		426A127FEAA27C6C6CB109C7 /* ActionRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionRouter.swift; sourceTree = "<group>"; };
 		61E9E9CD8D5CBF671178894E /* SpeechManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechManager.swift; sourceTree = "<group>"; };
+		6803171B6A2960D357D15AE8 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		6C58B150F5F9B6777EA3C3DD /* computer_chime.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = computer_chime.wav; sourceTree = "<group>"; };
 		84F9F8DEB8048D4453B4CD31 /* TTSService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSService.swift; sourceTree = "<group>"; };
 		8BD32DAFD6ED589F75214E0E /* ClaudeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeService.swift; sourceTree = "<group>"; };
+		90F55795144AE95696FA1839 /* SettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStore.swift; sourceTree = "<group>"; };
 		B5412F9C702568241FB93D64 /* WakeWordService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WakeWordService.swift; sourceTree = "<group>"; };
 		BBA19B5F42EE9ED5546FB0F8 /* MakeItSo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = MakeItSo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C895C0E77DF552F8FB8EE59A /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -68,6 +72,8 @@
 				8BD32DAFD6ED589F75214E0E /* ClaudeService.swift */,
 				C895C0E77DF552F8FB8EE59A /* ContentView.swift */,
 				008B6F9C8D2A57D7CC1BBF98 /* MakeItSoApp.swift */,
+				90F55795144AE95696FA1839 /* SettingsStore.swift */,
+				6803171B6A2960D357D15AE8 /* SettingsView.swift */,
 				61E9E9CD8D5CBF671178894E /* SpeechManager.swift */,
 				84F9F8DEB8048D4453B4CD31 /* TTSService.swift */,
 				B5412F9C702568241FB93D64 /* WakeWordService.swift */,
@@ -171,6 +177,8 @@
 				8A95071F65B5A9DA2A0FBD7F /* ClaudeService.swift in Sources */,
 				92A0468D165B08D3419681EF /* ContentView.swift in Sources */,
 				18EE9C72DD189EEBADD71849 /* MakeItSoApp.swift in Sources */,
+				28B7E0EE55B3B048F70A6E3F /* SettingsStore.swift in Sources */,
+				1D36BEA8294469AC7EB2F2BB /* SettingsView.swift in Sources */,
 				1BF315E33DC5140226DD96E9 /* SpeechManager.swift in Sources */,
 				3E5283F28549F79508D26DF3 /* TTSService.swift in Sources */,
 				EFE358F48B90BF2159A3BEDC /* WakeWordService.swift in Sources */,

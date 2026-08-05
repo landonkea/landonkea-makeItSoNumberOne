@@ -85,12 +85,42 @@ struct ContentView: View {
             .appendingPathComponent("conversation_history.json")
     }
 
+    // Controls whether the Settings sheet (SettingsView.swift) is shown.
+    // Toggled by the gear-icon toolbar button below — the iOS equivalent
+    // of Android's gear button that launches SettingsActivity.
+    @State private var showingSettings = false
+
     // This is the required property that every View must have. It
     // describes what to draw on screen. SwiftUI calls this whenever
     // it needs to render (or re-render) the screen. `some View` means
     // "this returns some type that conforms to the View protocol" —
     // we don't need to say exactly which type.
     var body: some View {
+        // Wrapped in a NavigationStack solely so we have a toolbar to hang
+        // the Settings gear button on (see .toolbar below) — this view had
+        // no navigation chrome before. The rest of the screen is unchanged.
+        NavigationStack {
+            contentBody
+                .toolbar {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            showingSettings = true
+                        } label: {
+                            Image(systemName: "gearshape")
+                        }
+                        .accessibilityLabel("Settings")
+                    }
+                }
+                .sheet(isPresented: $showingSettings) {
+                    SettingsView()
+                }
+        }
+    }
+
+    // The screen's original content, unchanged, now hosted inside the
+    // NavigationStack added above so a Settings toolbar button can be added
+    // without touching the rest of the layout.
+    private var contentBody: some View {
         // A vertical stack (VStack) arranges its children from top to
         // bottom, with 20 points of spacing between each child element.
         // The spacing adds breathing room between the title, button,
@@ -530,12 +560,16 @@ struct ContentView: View {
     // If no PICOVOICE_ACCESS_KEY is set, this function prints a message
     // and returns immediately — the assistant works via button only.
     private func startWakeWordDetection() {
-        // Read the Picovoice access key from the environment. This key
-        // is set in the Xcode scheme's environment variables. If it's
-        // not set, we skip wake word detection entirely and fall back
-        // to button-only mode. The `?? ""` handles the case where the
-        // environment variable doesn't exist at all.
-        let accessKey = ProcessInfo.processInfo.environment["PICOVOICE_ACCESS_KEY"] ?? ""
+        // Read the Picovoice access key from SettingsStore, which returns
+        // the user's saved Keychain value if they set one in Settings, or
+        // falls back to the PICOVOICE_ACCESS_KEY environment variable
+        // (set in the Xcode scheme's environment variables) otherwise.
+        // This is read once per call, same as before — the Settings UI
+        // (SettingsView.swift) tells the user a restart is required for a
+        // newly-saved Picovoice key to take effect, since wake-word
+        // detection is only (re)initialized here, at startup / on each
+        // explicit startWakeWordDetection() call, not on every request.
+        let accessKey = SettingsStore.getPicovoiceAccessKey()
 
         // If the key is empty (not set), we can't use Porcupine at all.
         // Print a message to the console so developers know why wake
