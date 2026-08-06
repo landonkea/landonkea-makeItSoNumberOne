@@ -738,6 +738,11 @@ CONFIG_SCHEMA = {
         "reminders": {"type": dict, "schema": {
             "todoist_api_token": {"type": str},
         }},
+        "journal": {"type": dict, "schema": {
+            "mqtt_host": {"type": str},
+            "mqtt_port": {"type": int},
+            "mqtt_topic": {"type": str},
+        }},
     }},
 }
 

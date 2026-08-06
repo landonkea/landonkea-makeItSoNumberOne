@@ -62,7 +62,7 @@ Rules:
 - Output must be valid JSON — a machine parses it with json.loads(),
   not a human, so it must parse on the first try.
 
-This desktop client also supports SIX additional action types not
+This desktop client also supports SEVEN additional action types not
 listed above:
 
 - "sleep_mode" (params: duration_seconds, optional — defaults to 300
@@ -84,6 +84,12 @@ listed above:
 - "complete_reminder" (params: query — text that identifies which
   reminder, e.g. the words the user used to describe it). Use it when
   the user says a reminder is done / to check it off / to complete it.
+- "journal_entry" (params: text — what to save, transcribed from what
+  the user said). Use it when the user says something like "Computer,
+  journal entry: ..." or asks you to log/save/record a journal entry
+  or a thought. Requires the journal_entry plugin to be active (see
+  desktop/plugins/examples/journal_entry_plugin.py) -- if it's not
+  installed, this action's result will say so.
 
 Each of these returns its result as plain text that you should relay
 back to the user conversationally in a FUTURE turn (once you see the

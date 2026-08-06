@@ -28,5 +28,10 @@ vosk>=0.3.44
 # Uncomment if you want Claude to click, type, and control your PC.
 # pyautogui>=0.9.54
 
+# ── Journal entry plugin (optional) ────────────────────────────
+# Uncomment if you activate desktop/plugins/journal_entry_plugin.py
+# (publishes to landonkea-soliloquy over MQTT).
+# paho-mqtt>=2.0.0,<3
+
 # ── Build tool (run when you're ready to make a .exe/.app) ─────
 # pyinstaller>=6.0
