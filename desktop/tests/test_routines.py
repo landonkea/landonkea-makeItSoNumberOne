@@ -1,15 +1,15 @@
 # ───────────────────────────────────────────────────────────────────
-# tests/test_routines.py — tests for local routines.yaml macros
+# tests/test_routines.py, tests for local routines.yaml macros
 # ───────────────────────────────────────────────────────────────────
 # WHY THESE TESTS EXIST
 # ----------------------
 # core/routines.py is the local "trigger phrase -> canned actions"
 # macro engine (see that module's docstring for the full rationale).
 # These tests exercise both halves of it directly:
-#   1. load_routines() — parsing/validating routines.yaml's shape,
+#   1. load_routines(), parsing/validating routines.yaml's shape,
 #      including malformed entries that should be skipped rather than
 #      crashing the whole load.
-#   2. match_routine() — the phrase-matching logic (whole-word
+#   2. match_routine(), the phrase-matching logic (whole-word
 #      substring match, case/punctuation insensitivity, and the
 #      "longest trigger wins" tie-break), all WITHOUT needing a real
 #      routines.yaml file on disk.
@@ -73,7 +73,7 @@ class MatchRoutineTests(unittest.TestCase):
         )
 
     def test_longest_trigger_wins_on_overlap(self):
-        # Both "morning" and "good morning" match this text — the
+        # Both "morning" and "good morning" match this text, the
         # more specific ("good morning") should win.
         result = routines.match_routine("say good morning please", self.routines)
         self.assertEqual(result["response"], "Good morning.")

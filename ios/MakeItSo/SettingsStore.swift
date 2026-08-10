@@ -8,14 +8,14 @@
 //
 // Values are persisted using the Keychain Services API (Security
 // framework) rather than UserDefaults, because UserDefaults stores a
-// plain plist on disk — not appropriate for real API keys/secrets.
+// plain plist on disk, not appropriate for real API keys/secrets.
 // The Keychain is Apple's OS-level secure storage, encrypted at rest
 // and backed by the Secure Enclave on supported devices. This mirrors
 // Android's choice of EncryptedSharedPreferences (backed by the
 // Android Keystore) for the same reason.
 //
 // If the user hasn't entered their own key (or clears it), everything
-// falls back to the existing environment-variable value — preserving
+// falls back to the existing environment-variable value, preserving
 // the original "set it in the Xcode scheme" option for anyone who
 // prefers that (e.g. local development, CI).
 // ───────────────────────────────────────────────────────────────────
@@ -88,14 +88,14 @@ enum SettingsStore {
     }
 
     // ── Fallback logic (pure, unit-testable) ─────────────────────
-    // Keychain access needs a real (or simulated) Keychain, which — while it
-    // does work under `swift test` on macOS — isn't necessary to exercise for
+    // Keychain access needs a real (or simulated) Keychain, which, while it
+    // does work under `swift test` on macOS, isn't necessary to exercise for
     // this one piece of logic: "prefer what the user typed, unless it's
     // empty/blank". Pulling it out into a pure function with no Security
     // framework dependency mirrors Android's SettingsRepository.resolveKey()
     // and lets SettingsStoreTests exercise it directly and cheaply.
     //
-    // NOTE: this does NOT trim `stored` — trimming happens once, at write
+    // NOTE: this does NOT trim `stored`, trimming happens once, at write
     // time, in setAnthropicApiKey()/setPicovoiceAccessKey() above (matching
     // Android's contract exactly).
     static func resolveKey(stored: String?, fallback: String) -> String {

@@ -78,12 +78,12 @@ class WakeWordService {
     //   4. Returns true when "Computer" is heard, false on error
     //
     // The function is async because it pauses until the wake word is
-    // detected (or an error occurs). It returns Bool — true means we
+    // detected (or an error occurs). It returns Bool, true means we
     // heard "Computer", false means something went wrong (mic permission
     // denied, invalid access key, etc.).
     //
     // Each call creates a fresh PorcupineManager instance. This is
-    // intentional — it ensures clean audio session setup each time and
+    // intentional, it ensures clean audio session setup each time and
     // avoids stale state from previous detection cycles. The previous
     // manager (if any) is destroyed at the start of this function.
     func detect() async -> Bool {
@@ -101,7 +101,7 @@ class WakeWordService {
         // callback-based API to Swift's modern async/await pattern.
         // The function "pauses" here and "resumes" when the wake word
         // is detected or an error occurs. The continuation object is
-        // like a bookmark — we call .resume() on it to return control.
+        // like a bookmark, we call .resume() on it to return control.
         return await withCheckedContinuation { continuation in
             // Wrap all Porcupine setup in a do-catch block because
             // PorcupineManager initializer and start() can throw errors
@@ -111,14 +111,14 @@ class WakeWordService {
                 // "Computer" keyword. This initializes Porcupine's audio
                 // processing pipeline (loading the keyword model, preparing
                 // the audio engine, etc.). It does NOT start capturing
-                // audio yet — that happens when we call .start() below.
+                // audio yet, that happens when we call .start() below.
                 //
                 // PorcupineManager takes four parameters:
-                //   1. accessKey — our Picovoice account key for auth
-                //   2. keywords — an array of keywords to detect. We use
+                //   1. accessKey, our Picovoice account key for auth
+                //   2. keywords, an array of keywords to detect. We use
                 //      [.computer] which is the built-in "Computer" keyword
-                //   3. onDetection — callback when a keyword is heard
-                //   4. errorHandler — callback if an error occurs
+                //   3. onDetection, callback when a keyword is heard
+                //   4. errorHandler, callback if an error occurs
                 let manager = try PorcupineManager(
                     accessKey: accessKey,
                     keywords: [Porcupine.BuiltInKeyword.computer],
@@ -126,7 +126,7 @@ class WakeWordService {
                         // The wake word was detected! Resume the
                         // continuation with true to unblock detect().
                         // The parameter (underscore) is the keyword index
-                        // — since we only have one keyword, it's always 0.
+                        //, since we only have one keyword, it's always 0.
                         continuation.resume(returning: true)
                     },
                     errorCallback: { error in
@@ -168,12 +168,12 @@ class WakeWordService {
         #endif
     }
 
-    // Clean up Porcupine resources — stop audio capture and release the
+    // Clean up Porcupine resources, stop audio capture and release the
     // PorcupineManager instance. Call this when you're done detecting
     // (e.g., after detecting "Computer" and starting speech recognition)
     // to free the microphone for other uses (like SpeechManager).
     //
-    // This is safe to call multiple times — subsequent calls are no-ops
+    // This is safe to call multiple times, subsequent calls are no-ops
     // once the manager is already stopped and set to nil.
     func destroy() {
         // On iOS, stop the PorcupineManager and release the reference.
@@ -182,7 +182,7 @@ class WakeWordService {
         // Stop the audio engine and detection. This tells Porcupine to
         // stop capturing audio from the microphone, deactivate the audio
         // session, and release any audio resources it was using.
-        // stop() throws, but we don't care about the error here — this is
+        // stop() throws, but we don't care about the error here, this is
         // cleanup, so try? safely ignores any failure.
         try? porcupineManager?.stop()
         // Release the manager instance. Setting to nil lets Swift's ARC

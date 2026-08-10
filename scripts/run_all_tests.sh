@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ───────────────────────────────────────────────────────────────────
-# run_all_tests.sh — runs the test suite for all three MakeItSo
+# run_all_tests.sh, runs the test suite for all three MakeItSo
 # platforms (desktop, android, ios) and writes a combined summary to
 # test-results/latest.md.
 #
@@ -76,7 +76,7 @@ run_desktop() {
     DESKTOP_FAILURES="$(grep -E "^(FAIL|ERROR): " "$log")"
   else
     DESKTOP_STATUS="ERROR"
-    DESKTOP_SUMMARY="test run did not complete (exit code ${exit_code}) — see raw/desktop.log"
+    DESKTOP_SUMMARY="test run did not complete (exit code ${exit_code}), see raw/desktop.log"
   fi
 }
 
@@ -117,10 +117,10 @@ run_android() {
     ANDROID_SUMMARY="$((total - bad)) passed, ${bad} failed, ${skipped} skipped (of ${total} total)"
   elif [ "$exit_code" -eq 0 ]; then
     ANDROID_STATUS="PASS"
-    ANDROID_SUMMARY="build succeeded, but no unit test sources exist yet under android/app/src/test — 0 tests run"
+    ANDROID_SUMMARY="build succeeded, but no unit test sources exist yet under android/app/src/test, 0 tests run"
   else
     ANDROID_STATUS="ERROR"
-    ANDROID_SUMMARY="build/test run failed (exit code ${exit_code}) before producing test results — see raw/android.log"
+    ANDROID_SUMMARY="build/test run failed (exit code ${exit_code}) before producing test results, see raw/android.log"
     ANDROID_FAILURES="$(tail -15 "$log")"
   fi
 }
@@ -149,7 +149,7 @@ run_ios() {
 
   if grep -q "is not currently configured for the test action" "$log"; then
     IOS_STATUS="SKIPPED"
-    IOS_SUMMARY="no XCTest target configured in project.yml yet — 0 tests run (build-only verification exists in CI)"
+    IOS_SUMMARY="no XCTest target configured in project.yml yet, 0 tests run (build-only verification exists in CI)"
   elif [ "$exit_code" -eq 0 ] && grep -q "TEST SUCCEEDED" "$log"; then
     IOS_STATUS="PASS"
     local exec_line
@@ -161,7 +161,7 @@ run_ios() {
     IOS_FAILURES="$(grep -E "error:.*XCTAssert|^    .*failed \(" "$log")"
   else
     IOS_STATUS="ERROR"
-    IOS_SUMMARY="test run did not complete cleanly (exit code ${exit_code}) — see raw/ios.log"
+    IOS_SUMMARY="test run did not complete cleanly (exit code ${exit_code}), see raw/ios.log"
   fi
 }
 
@@ -175,7 +175,7 @@ esac
 
 # ── Write report (combined, or just the one platform that ran) ──
 {
-  echo "# Test Results — $TIMESTAMP"
+  echo "# Test Results, $TIMESTAMP"
   echo
   echo "| Platform | Status | Summary |"
   echo "|---|---|---|"

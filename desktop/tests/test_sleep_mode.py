@@ -1,5 +1,5 @@
 # ───────────────────────────────────────────────────────────────────
-# tests/test_sleep_mode.py — tests for the sleep_mode ("stop
+# tests/test_sleep_mode.py, tests for the sleep_mode ("stop
 # listening"/mute) action
 # ───────────────────────────────────────────────────────────────────
 # WHY THESE TESTS EXIST
@@ -9,7 +9,7 @@
 # (core/actions/system.py's enter_sleep_mode/is_muted/
 # mute_seconds_remaining) is deliberately kept free of any audio/mic
 # dependency specifically so it CAN be unit tested without touching
-# real hardware — these tests exercise that logic directly, plus the
+# real hardware, these tests exercise that logic directly, plus the
 # action_router.py wiring that connects the "sleep_mode" action type
 # to it.
 #

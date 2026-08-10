@@ -2,13 +2,13 @@
 // SwiftUI screen that lets the user view/edit their Anthropic API key
 // and Picovoice access key at runtime, backed by SettingsStore's
 // Keychain-based storage. This is the iOS equivalent of Android's
-// SettingsActivity.kt/SettingsScreen — same two labeled secret-entry
+// SettingsActivity.kt/SettingsScreen, same two labeled secret-entry
 // fields (masked with a show/hide toggle), each with Save + "Use
 // default" (reset) actions and a "Status: using your saved key / using
 // built-in default" line.
 //
 // Presented from ContentView as a sheet, reached via a gear-icon
-// toolbar button — the iOS equivalent of Android's gear button that
+// toolbar button, the iOS equivalent of Android's gear button that
 // launches SettingsActivity.
 // ───────────────────────────────────────────────────────────────────
 
@@ -16,7 +16,7 @@ import SwiftUI
 
 // A single labeled secret-entry section: a masked text field plus
 // Save/Use-default buttons and a status line. Reused for both the
-// Anthropic and Picovoice keys below — mirrors Android's ApiKeyField.
+// Anthropic and Picovoice keys below, mirrors Android's ApiKeyField.
 private struct ApiKeyField: View {
     let title: String
     let helperText: String
@@ -83,7 +83,7 @@ struct SettingsView: View {
 
     // Bumped after every save/reset so the status lines above re-read
     // SettingsStore's isXUserSet() instead of showing stale state from
-    // first render — mirrors Android's `statusVersion` remember-state.
+    // first render, mirrors Android's `statusVersion` remember-state.
     @State private var statusVersion = 0
 
     init() {

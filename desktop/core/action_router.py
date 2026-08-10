@@ -1,5 +1,5 @@
 # ───────────────────────────────────────────────────────────────────
-# action_router.py — executes Claude's action commands
+# action_router.py, executes Claude's action commands
 # ───────────────────────────────────────────────────────────────────
 # After Claude processes the user's request and returns action
 # commands, this module routes each action to the right handler.
@@ -15,23 +15,23 @@
 #
 # WHERE THE REGISTRY COMES FROM
 # --------------------------------
-# Every action is a plugin — there's no separate fast path for
+# Every action is a plugin, there's no separate fast path for
 # built-ins vs. third-party actions:
 #   1. Built-in plugins (open_app, search_web, sleep_mode, the
 #      weather/calendar/reminders integrations, etc.) come from
 #      core/plugins_builtin.py's BUILTIN_PLUGINS list.
 #   2. Third-party plugins are auto-discovered at import time from
-#      the desktop/plugins/ directory (gitignored — see
+#      the desktop/plugins/ directory (gitignored, see
 #      desktop/plugins/examples/ for a template, and README.md's
 #      "Writing a plugin" section for how to write your own) by
 #      core/plugin_loader.py.
-# A third-party plugin can never override a built-in action name —
+# A third-party plugin can never override a built-in action name,
 # see plugin_loader.build_registry()/discover_plugins() for that
 # collision handling, and for why a malformed plugin file is logged
 # and skipped rather than crashing startup (same philosophy as
-# routines.yaml — see core/routines.py).
+# routines.yaml, see core/routines.py).
 #
-# This is like the "transporter room" — it receives commands and
+# This is like the "transporter room", it receives commands and
 # routes them to the right department (system control, web search,
 # file operations, etc.), it just does that via a lookup table now
 # instead of a long if/elif chain.
@@ -66,7 +66,7 @@ def load_registry(plugins_dir=PLUGINS_DIR, builtin_plugins=None):
     )
 
 
-# Built once at import time — mirrors routines.yaml being loaded once
+# Built once at import time, mirrors routines.yaml being loaded once
 # at startup rather than re-read on every request. Tests that need a
 # custom registry (e.g. to exercise plugin discovery against a
 # scratch directory) can call load_registry(...) themselves and pass
@@ -141,7 +141,7 @@ def execute_action(action_dict, config, registry=None, profile=None):
         # If none of the registered plugins matched, we don't know
         # what this action is. Print a warning showing the unknown
         # action type so the developer knows to add support for it
-        # (or the user knows their third-party plugin didn't load —
+        # (or the user knows their third-party plugin didn't load,
         # check the "[plugins]" startup log lines).
         print(f"  [router] Unknown action type: \"{action_type}\"")
         return None
@@ -164,9 +164,9 @@ def execute_actions(action_list, config, registry=None, profile=None):
     config : dict
         The app configuration.
     registry : dict, optional
-        See execute_action() — defaults to the module-level REGISTRY.
+        See execute_action(), defaults to the module-level REGISTRY.
     profile : dict, optional
-        See execute_action() — the active personalization profile
+        See execute_action(), the active personalization profile
         used to resolve contact nicknames / preferred-app aliases in
         each action's params before dispatch.
 
@@ -208,7 +208,7 @@ def execute_actions(action_list, config, registry=None, profile=None):
         # after it. Catching it here means one bad action just
         # reports an error while the rest of the list still runs.
         # This also covers a third-party plugin's execute() raising
-        # an unexpected exception — same "one bad action doesn't
+        # an unexpected exception, same "one bad action doesn't
         # sink the batch" guarantee applies to plugins as to any
         # built-in action.
         try:

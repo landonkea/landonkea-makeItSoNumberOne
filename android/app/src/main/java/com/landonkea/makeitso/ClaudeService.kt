@@ -1,5 +1,5 @@
 // ───────────────────────────────────────────────────────────────────
-// ClaudeService.kt — talks to Claude (Online) or Ollama (Offline)
+// ClaudeService.kt, talks to Claude (Online) or Ollama (Offline)
 // ───────────────────────────────────────────────────────────────────
 // This module sends the user's transcribed speech to either:
 //   1. ONLINE mode  → Anthropic's Claude API (cloud, requires internet + API key)
@@ -27,7 +27,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 // OkHttpClient is the core class for making HTTP requests (like a web browser inside your code).
 import okhttp3.OkHttpClient
-// Request represents a single HTTP request (URL, headers, body — everything needed to call an API).
+// Request represents a single HTTP request (URL, headers, body, everything needed to call an API).
 import okhttp3.Request
 // Response represents the HTTP response that comes back from a server after a Request is sent.
 import okhttp3.Response
@@ -41,7 +41,7 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 // ── Data class for the assistant's response ─────────────────────
-// A "data class" is a Kotlin shortcut — it automatically creates
+// A "data class" is a Kotlin shortcut, it automatically creates
 // toString(), equals(), hashCode(), and copy() methods for you.
 // This one stores what the assistant says and what actions to take.
 // It works identically whether the response came from Claude or Ollama.
@@ -50,7 +50,7 @@ import java.util.concurrent.TimeUnit
 data class ClaudeResult(
     // "val" means read-only (immutable). spokenText holds the sentence the assistant wants spoken aloud.
     val spokenText: String,
-    // actions is a list of Action objects — each one is a command the assistant wants executed.
+    // actions is a list of Action objects, each one is a command the assistant wants executed.
     val actions: List<Action>
 )
 
@@ -69,7 +69,7 @@ data class Action(
 // data class (rather than a raw Pair<String, String>) so call sites
 // read as "role" / "content" instead of ".first" / ".second".
 data class ConversationTurn(
-    // "user" or "assistant" — who said this.
+    // "user" or "assistant", who said this.
     val role: String,
     // The text of that turn. For assistant turns this is stored as
     // "RESPONSE: <spokenText>" (matching the shared RESPONSE:/
@@ -78,7 +78,7 @@ data class ConversationTurn(
     val content: String
 )
 
-// "object" in Kotlin creates a singleton — exactly one instance exists for the entire app lifetime.
+// "object" in Kotlin creates a singleton, exactly one instance exists for the entire app lifetime.
 // ClaudeService groups all assistant-related functions together in one place,
 // including both the online (Claude) and offline (Ollama) providers.
 object ClaudeService {
@@ -104,16 +104,16 @@ object ClaudeService {
     // so the actual text doesn't have extra indentation when sent to the assistant.
 
     // ── Shared HTTP clients (created once, reused for every call) ─
-    // WHAT: OkHttpClient is expensive to construct — each instance owns its own connection
+    // WHAT: OkHttpClient is expensive to construct, each instance owns its own connection
     // pool (a cache of open TCP/TLS connections kept warm for reuse), a dispatcher thread
     // pool, and a DNS cache. HOW: because ClaudeService is a Kotlin "object" (singleton),
     // these "by lazy" properties are built exactly once, the first time each is touched, and
-    // then reused for the lifetime of the app process — every call to processWithClaude() or
+    // then reused for the lifetime of the app process, every call to processWithClaude() or
     // processWithOllama() reuses the same client instead of building a new one. WHY: building
     // a fresh OkHttpClient per request throws away that connection pool every time, so the
     // next request has to renegotiate a new TCP connection (and TLS handshake, for HTTPS)
     // from scratch instead of reusing a "keep-alive" connection already open to the same
-    // host — wasted latency and CPU/battery on every single request. Two separate clients are
+    // host, wasted latency and CPU/battery on every single request. Two separate clients are
     // kept (rather than one shared one) because the two providers have deliberately different
     // timeout profiles below.
 
@@ -133,28 +133,28 @@ object ClaudeService {
     // ollamaClient: talks to a local Ollama server on the same machine.
     private val ollamaClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
-            // connectTimeout: short, because it's local — if Ollama isn't running, fail fast.
+            // connectTimeout: short, because it's local, if Ollama isn't running, fail fast.
             .connectTimeout(10, TimeUnit.SECONDS)
             // readTimeout: generous, because local LLMs can be slow on CPU-only machines.
             .readTimeout(60, TimeUnit.SECONDS)
-            // writeTimeout: matches connectTimeout — our request bodies are small local calls.
+            // writeTimeout: matches connectTimeout, our request bodies are small local calls.
             .writeTimeout(10, TimeUnit.SECONDS)
             .build()
     }
 
     // ── Main entry point: process user text with auto-fallback ──
-    // "suspend" means this function is a coroutine — it can pause without blocking the UI thread.
+    // "suspend" means this function is a coroutine, it can pause without blocking the UI thread.
     // It takes the user's speech text and an optional mode string ("auto", "online", or "offline").
     // `conversationHistory` is the bounded list of prior turns (see ConversationTurn above) that
-    // the caller (MainActivity) maintains across cycles — passing it in lets both providers give
+    // the caller (MainActivity) maintains across cycles, passing it in lets both providers give
     // context-aware replies (e.g. "open Safari" then "now search it" knows what "it" refers to),
     // matching the desktop Python version's conversation_history behavior. Defaults to an empty
     // list so existing callers that don't pass one keep working exactly as before.
     // `apiKey` is the Anthropic API key to send with the request. Defaults to the
     // BuildConfig-injected value (see app/build.gradle.kts -> ANTHROPIC_API_KEY) for backward
     // compatibility, but MainActivity always passes the resolved value from
-    // SettingsRepository.getAnthropicApiKey() — the user's saved key if they've set one,
-    // otherwise that same BuildConfig default — so a key change in Settings takes effect
+    // SettingsRepository.getAnthropicApiKey(), the user's saved key if they've set one,
+    // otherwise that same BuildConfig default, so a key change in Settings takes effect
     // immediately without needing to touch this default.
     // Returns a ClaudeResult, or null if ALL providers fail.
     suspend fun process(
@@ -173,7 +173,7 @@ object ClaudeService {
                 val onlineResult = processWithClaude(userText, conversationHistory, apiKey)
                 // If the online call succeeded (result is not null)...
                 if (onlineResult != null) {
-                    // ...return the Claude result immediately — no need to try offline.
+                    // ...return the Claude result immediately, no need to try offline.
                     return@withContext onlineResult
                 }
                 // If online returned null, we fall through to the offline attempt below.
@@ -192,9 +192,9 @@ object ClaudeService {
             // If mode was something unexpected, we also return null as a safety net.
             return@withContext null
         }
-        // End of withContext(Dispatchers.IO) — execution switches back to the original thread here.
+        // End of withContext(Dispatchers.IO), execution switches back to the original thread here.
     }
-    // End of process() — the dual-mode entry point.
+    // End of process(), the dual-mode entry point.
 
     // ── Online provider: talk to Claude via Anthropic API ──────
     // This is the original implementation, extracted into its own private function.
@@ -213,7 +213,7 @@ object ClaudeService {
             try {
                 // ── Build the API request ──────────────────────
                 // Reuse the shared claudeClient (built once, lazily, above) instead of
-                // constructing a new OkHttpClient here — see the comment on claudeClient
+                // constructing a new OkHttpClient here, see the comment on claudeClient
                 // for why a fresh client per call would be wasteful.
                 val client = claudeClient
 
@@ -231,7 +231,7 @@ object ClaudeService {
                     put("system", SYSTEM_PROMPT)
 
                     // "messages" is an array of conversation turns (each turn is a JSON object with role + content).
-                    // Earlier turns from conversationHistory come first (oldest to newest — the
+                    // Earlier turns from conversationHistory come first (oldest to newest, the
                     // order Claude's API requires), then the user's brand-new utterance last.
                     put("messages", JSONArray().apply {
                         // Replay each prior turn in its original role/content shape.
@@ -241,7 +241,7 @@ object ClaudeService {
                                 put("content", turn.content)
                             })
                         }
-                        // Add one message object to the array — the user's current utterance.
+                        // Add one message object to the array, the user's current utterance.
                         put(JSONObject().apply {
                             // "role": "user" tells Claude this message comes from the human speaking.
                             put("role", "user")
@@ -260,7 +260,7 @@ object ClaudeService {
                     // Set the destination URL for this request.
                     .url(url)
                     // Add an HTTP header with our secret API key so Anthropic knows who we are.
-                    // Resolved by the caller (see process()'s apiKey parameter doc above) — either
+                    // Resolved by the caller (see process()'s apiKey parameter doc above), either
                     // the user's saved Settings key or the BuildConfig-injected default.
                     .addHeader("x-api-key", apiKey)
                     // Tell the server which version of the Anthropic API we expect to talk to.
@@ -277,14 +277,14 @@ object ClaudeService {
                 // client.newCall(request).execute() actually sends the HTTP request and blocks until we get a response.
                 val response = client.newCall(request).execute()
                 // buildResultFromResponse() does all the shared work of checking success, reading
-                // the body, and parsing it into a ClaudeResult — see its comment below for why
+                // the body, and parsing it into a ClaudeResult, see its comment below for why
                 // this logic is shared between the Claude and Ollama providers instead of
                 // duplicated. We only need to tell it HOW to pull the raw generated text out of
                 // Claude's specific JSON shape, via this lambda (an inline, unnamed function).
                 return@withContext buildResultFromResponse(response) { json ->
                     // Get the "content" array from Claude's response. Content holds one or more text blocks.
                     val content = json.getJSONArray("content")
-                    // If content is empty, Claude didn't return any text — nothing to process, signal null.
+                    // If content is empty, Claude didn't return any text, nothing to process, signal null.
                     if (content.length() == 0) {
                         null
                     } else {
@@ -304,7 +304,7 @@ object ClaudeService {
         }
         // End of withContext(Dispatchers.IO).
     }
-    // End of processWithClaude() — the online provider.
+    // End of processWithClaude(), the online provider.
 
     // ── Offline provider: talk to Ollama on localhost ──────────
     // This function calls a local Ollama server at http://localhost:11434/api/generate.
@@ -323,7 +323,7 @@ object ClaudeService {
             try {
                 // ── Build the API request ──────────────────────
                 // Reuse the shared ollamaClient (built once, lazily, above) instead of
-                // constructing a new OkHttpClient here — see the comment on ollamaClient
+                // constructing a new OkHttpClient here, see the comment on ollamaClient
                 // for why a fresh client per call would be wasteful.
                 val client = ollamaClient
 
@@ -349,7 +349,7 @@ object ClaudeService {
                     // "options" is a JSON object for model-specific settings like token limits.
                     put("options", JSONObject().apply {
                         // "num_predict" limits how many tokens the model can generate in its reply.
-                        // 512 is roughly 400 words — enough for a concise voice assistant response.
+                        // 512 is roughly 400 words, enough for a concise voice assistant response.
                         put("num_predict", 512)
                     })
                 }
@@ -371,7 +371,7 @@ object ClaudeService {
                 // buildResultFromResponse() (shared with processWithClaude() above) handles checking
                 // success, reading the body, and building the final ClaudeResult. We only supply the
                 // Ollama-specific detail: Ollama's /api/generate returns a JSON object with a
-                // "response" field containing the full text generated by the model — a different
+                // "response" field containing the full text generated by the model, a different
                 // shape from Claude's "content" array, which is why this lambda differs from the one
                 // in processWithClaude() even though everything else about handling the response is
                 // identical.
@@ -387,7 +387,7 @@ object ClaudeService {
         }
         // End of withContext(Dispatchers.IO).
     }
-    // End of processWithOllama() — the offline provider.
+    // End of processWithOllama(), the offline provider.
 
     // ── Build Ollama's single-string prompt from history + new text ─
     // Ollama's /api/generate endpoint (unlike Claude's Messages API) takes ONE flat text
@@ -401,7 +401,7 @@ object ClaudeService {
             val roleLabel = turn.role.replaceFirstChar { it.uppercase() }
             builder.append(roleLabel).append(": ").append(turn.content).append("\n\n")
         }
-        // End the prompt with "Assistant:" and nothing after it — the model's cue to continue
+        // End the prompt with "Assistant:" and nothing after it, the model's cue to continue
         // the text FROM this point, i.e. generate the assistant's reply next.
         builder.append("User: ").append(userText).append("\n\nAssistant:")
         return builder.toString()
@@ -411,10 +411,10 @@ object ClaudeService {
     // ── Shared response handling for both providers ─────────────
     // Both processWithClaude() and processWithOllama() need to do the exact same three things
     // once they have an HTTP response in hand: (1) make sure the server said "success", closing
-    // the response if not (to avoid leaking the underlying network connection — see the comment
+    // the response if not (to avoid leaking the underlying network connection, see the comment
     // at the call sites), (2) read and JSON-parse the response body, and (3) pull the assistant's
     // raw generated text out of that JSON and split it into spoken text + actions. The ONLY thing
-    // that differs between the two providers is WHERE in the JSON that raw text lives — Claude
+    // that differs between the two providers is WHERE in the JSON that raw text lives, Claude
     // nests it inside a "content" array, Ollama puts it directly in a "response" field. Rather than
     // duplicate steps 1–3 in both functions, this shared helper takes a lambda ("extractFullText")
     // that knows how to pull the text out of that provider's specific JSON shape, and does
@@ -426,7 +426,7 @@ object ClaudeService {
         // Check if the server returned a success status code (200–299 range).
         if (!response.isSuccessful) {
             // If the request failed (e.g., 400 Bad Request, 500 Server Error, Ollama not running),
-            // close the response body before returning — otherwise this leaks the underlying
+            // close the response body before returning, otherwise this leaks the underlying
             // connection/stream since nothing else ever reads or closes it.
             response.close()
             return null
@@ -489,7 +489,7 @@ object ClaudeService {
             // so a malformed block (no action type) is silently dropped instead of crashing.
             actions.addAll(blocks.drop(1).mapNotNull { block -> parseActionBlock(block) })
         }
-        // If no match was found, actions list stays empty — the caller will handle that.
+        // If no match was found, actions list stays empty, the caller will handle that.
 
         // Return the list of parsed actions (may be empty if none were found or parsing failed).
         return actions
@@ -503,7 +503,7 @@ object ClaudeService {
     private fun parseActionBlock(block: String): Action? {
         // Split the current action block into separate lines for parsing.
         val lines = block.trim().split("\n")
-        // The first line of the block is the action type string. If it's null, this block is empty — skip it.
+        // The first line of the block is the action type string. If it's null, this block is empty, skip it.
         val actionType = lines.firstOrNull()?.trim() ?: return null
 
         // Delegate to a second helper that reads just the "params:" section into a map.

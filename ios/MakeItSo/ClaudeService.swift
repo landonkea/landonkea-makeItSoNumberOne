@@ -2,8 +2,8 @@
 // This file contains all the code needed to talk to a Large Language
 // Model (LLM) AI assistant from an iPhone app. It supports TWO modes:
 //
-//   ONLINE  mode: Claude API  (Anthropic) — smarter, needs internet
-//   OFFLINE mode: Ollama/Llama (local)    — free, runs on your machine
+//   ONLINE  mode: Claude API  (Anthropic), smarter, needs internet
+//   OFFLINE mode: Ollama/Llama (local)   , free, runs on your machine
 //
 // The "mode" is read from the system environment variable AI_MODE.
 //   - "auto"    : try online first, fall back to offline if it fails
@@ -15,7 +15,7 @@
 // and parse JSON responses for both AI providers.
 // ──────────────────────────────────────────────────────────────────────
 
-// Import Apple's Foundation framework — this gives us access to basic
+// Import Apple's Foundation framework, this gives us access to basic
 // types like String, URL, Data, JSONSerialization, and URLSession.
 // We need these to make network requests and work with JSON data.
 import Foundation
@@ -48,7 +48,7 @@ struct ClaudeAction {
 // desktop/make_it_so.py's _record_exchange()). Codable so ContentView
 // can persist an array of these to disk as JSON and reload it later.
 struct ConversationTurn: Codable {
-    // "user" or "assistant" — who said this.
+    // "user" or "assistant", who said this.
     let role: String
     // The text of that turn. For assistant turns this is stored as
     // "RESPONSE: <spokenText>" (matching the RESPONSE:/ACTIONS: prompt
@@ -59,11 +59,11 @@ struct ConversationTurn: Codable {
 
 // Define the main class that handles talking to the AI brain.
 // A class is like a blueprint for creating objects. This one is a
-// "service" — a reusable component that provides a specific feature
+// "service", a reusable component that provides a specific feature
 // (in this case, communicating with an LLM like Claude or Ollama).
 class ClaudeService {
     // Create a single shared instance of this class that the whole app
-    // can use. This is called the "singleton pattern" — instead of
+    // can use. This is called the "singleton pattern", instead of
     // creating multiple copies, everyone shares one. We use `static`
     // to make it a type-level property (belongs to the class itself,
     // not to any specific instance). `shared` is the conventional name.
@@ -73,7 +73,7 @@ class ClaudeService {
     // fresh via SettingsStore on every access (this is a computed
     // property, not a stored `let`) so a key the user just saved in
     // Settings (SettingsView.swift) takes effect on the very next
-    // request — no app restart needed. SettingsStore itself prefers the
+    // request, no app restart needed. SettingsStore itself prefers the
     // user's Keychain-saved value and falls back to the
     // ANTHROPIC_API_KEY environment variable when nothing is saved,
     // exactly like this property used to read the environment variable
@@ -94,7 +94,7 @@ class ClaudeService {
     // Store the URL for Claude's API (the web address we send requests
     // to). We force-unwrap with `!` because we know this URL is valid
     // (we typed it correctly in the code). If it were invalid, the app
-    // would crash — that's intentional because a bad URL means the
+    // would crash, that's intentional because a bad URL means the
     // app can't work at all. This URL points to Anthropic's message
     // endpoint that accepts our conversation text and returns a reply.
     private let apiURL = URL(string: "https://api.anthropic.com/v1/messages")!
@@ -108,19 +108,19 @@ class ClaudeService {
         // Try to find system_prompt.txt in the app's main bundle.
         if let path = Bundle.main.path(forResource: "system_prompt", ofType: "txt"),
            let content = try? String(contentsOfFile: path, encoding: .utf8) {
-            // Successfully loaded from file — use it.
+            // Successfully loaded from file, use it.
             return content
         }
         // Fallback hardcoded prompt if the file isn't available.
         return """
-        You are the computer from the USS Enterprise (NCC-1701-D) in Star Trek: The Next Generation. You are helpful, precise, and calm. The user has addressed you by saying "Computer" — so you are now active.
+        You are the computer from the USS Enterprise (NCC-1701-D) in Star Trek: The Next Generation. You are helpful, precise, and calm. The user has addressed you by saying "Computer", so you are now active.
 
         Your job is to:
         1. Answer the user's question or fulfill their request.
         2. If they ask you to do something on the computer (open an app, search the web, type something, click something, check files, etc.), issue the appropriate action command.
         3. If you don't understand or can't do something, say so clearly.
 
-        OUTPUT FORMAT — You MUST respond in this exact format:
+        OUTPUT FORMAT, You MUST respond in this exact format:
 
         RESPONSE: <what you say out loud to the user, 1-3 sentences>
 
@@ -136,7 +136,7 @@ class ClaudeService {
         - open_app: Open an application (params: name)
         - search_web: Search the internet (params: query)
         - type_text: Type text at the cursor (params: text)
-        - press_keys: Press keyboard shortcut (params: keys — list)
+        - press_keys: Press keyboard shortcut (params: keys, list)
         - run_command: Run a shell command (params: command)
         - read_file: Read a file (params: path)
         - scroll: Scroll the screen (params: direction [up/down], amount [int])
@@ -163,21 +163,21 @@ class ClaudeService {
     //   mode = "offline" → skip Claude, go straight to Ollama
     //   mode = "auto"   → try Claude first, fall back to Ollama on failure
     // `conversationHistory` is the bounded list of prior turns (see ConversationTurn above)
-    // that the caller (ContentView) maintains across cycles — passing it in lets both providers
+    // that the caller (ContentView) maintains across cycles, passing it in lets both providers
     // give context-aware replies (e.g. "open Safari" then "now search it" knows what "it"
     // refers to), matching the desktop Python version's conversation_history behavior. Defaults
     // to an empty array so existing call sites that don't pass one keep working unchanged.
     func process(_ userText: String, conversationHistory: [ConversationTurn] = []) async -> ClaudeResult? {
         // Check if the API key is empty (not set). `guard` is a Swift
-        // keyword that checks a condition — if it fails, we MUST exit
-        // the function (via return). The `!` means "not" — so this
+        // keyword that checks a condition, if it fails, we MUST exit
+        // the function (via return). The `!` means "not", so this
         // checks "if apiKey is NOT empty". If it IS empty, we would
         // normally return, BUT we also let "offline" mode proceed
         // (Ollama doesn't need an API key).
         // Only bail if mode is "online" (which requires a key).
         if apiKey.isEmpty && mode == "online" {
             // Print a message to the debug console so developers know
-            // the API key is missing. This doesn't show to users — it's
+            // the API key is missing. This doesn't show to users, it's
             // only visible when running through Xcode.
             print("ANTHROPIC_API_KEY not set and mode is 'online'")
             // Return a fake response so the app doesn't crash.
@@ -192,7 +192,7 @@ class ClaudeService {
         // without internet access or to avoid API costs.
         if mode == "offline" {
             // Print a log message so we know we're using offline mode.
-            print("AI mode is 'offline' — calling Ollama directly.")
+            print("AI mode is 'offline', calling Ollama directly.")
             // Call the Ollama function and return its result directly.
             return await processWithOllama(userText, conversationHistory: conversationHistory)
         }
@@ -201,14 +201,14 @@ class ClaudeService {
         // If we get here, mode is either "auto" or "online".
         // We try the Claude API first. If it fails AND mode is "auto",
         // we'll fall back to Ollama below.
-        print("AI mode is '\(mode)' — trying Claude API first.")
+        print("AI mode is '\(mode)', trying Claude API first.")
 
         // Try the online Claude call. If it succeeds, we return the
         // result immediately. If mode is "online" and it fails, we
         // return nil (no fallback allowed). If mode is "auto" and it
         // fails, we continue to the Ollama fallback below.
         if let result = await processWithClaude(userText, conversationHistory: conversationHistory) {
-            // Claude returned a valid result — return it immediately.
+            // Claude returned a valid result, return it immediately.
             return result
         }
 
@@ -216,7 +216,7 @@ class ClaudeService {
         // If mode is "online", we're not allowed to fall back.
         if mode == "online" {
             // Log that online mode failed and we're not falling back.
-            print("Claude failed and mode is 'online' — no fallback.")
+            print("Claude failed and mode is 'online', no fallback.")
             // Return nil to indicate total failure.
             return nil
         }
@@ -224,13 +224,13 @@ class ClaudeService {
         // ── OFFLINE FALLBACK (Ollama) ───────────────────────────
         // Mode must be "auto" since we already handled "online" and
         // "offline" above. Log the fallback for debugging.
-        print("Claude failed — falling back to offline Ollama.")
+        print("Claude failed, falling back to offline Ollama.")
         // Call the Ollama function and return whatever it gives us
         // (might be a valid result or nil if Ollama also fails).
         return await processWithOllama(userText, conversationHistory: conversationHistory)
     }
 
-    // ── processWithClaude() — Online: calls Anthropic's Claude API ──
+    // ── processWithClaude(), Online: calls Anthropic's Claude API ──
     // This is the ORIGINAL logic extracted into its own function.
     // It sends the user's text to Claude over the internet and parses
     // the structured response (spoken text + actions).
@@ -244,7 +244,7 @@ class ClaudeService {
         // block throws an error, execution jumps to the `catch` block.
         do {
             // Create the list of messages to send to Claude. Each message
-            // has a "role" (who's speaking — here "user" means the human)
+            // has a "role" (who's speaking, here "user" means the human)
             // and "content" (what they said). We put this inside an array
             // (square brackets) because Claude expects a list of messages
             // forming a conversation. `userText` is the transcribed speech.
@@ -256,7 +256,7 @@ class ClaudeService {
             }
             messages.append(["role": "user", "content": userText])
 
-            // Build the full request body — a dictionary of all the
+            // Build the full request body, a dictionary of all the
             // parameters Claude's API needs. [String: Any] means the
             // keys are strings and the values can be any type (string,
             // number, array, etc.).
@@ -269,7 +269,7 @@ class ClaudeService {
                 // words) in Claude's response. This limits how long the
                 // reply can be so we don't get a never-ending response.
                 "max_tokens": 1024,
-                // The system prompt — our instructions to Claude about
+                // The system prompt, our instructions to Claude about
                 // how to behave and what format to use for the response.
                 "system": systemPrompt,
                 // The conversation messages (just the user's text for now).
@@ -287,11 +287,11 @@ class ClaudeService {
             // we use `try` to catch any error.
             let jsonData = try JSONSerialization.data(withJSONObject: body)
 
-            // Create a URLRequest — an object that represents an HTTP
+            // Create a URLRequest, an object that represents an HTTP
             // request we'll send to the server. We give it the URL we
             // stored earlier (the Anthropic API endpoint).
             var request = URLRequest(url: apiURL)
-            // Set the HTTP method to POST — this tells the server we're
+            // Set the HTTP method to POST, this tells the server we're
             // sending data (not just asking to read something, which
             // would be GET). POST is used when we're creating something
             // or sending a message.
@@ -302,7 +302,7 @@ class ClaudeService {
             // allowed to use the service.
             request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
             // Tell Anthropic which version of their API we're using.
-            // This ensures compatibility — if Anthropic changes their
+            // This ensures compatibility, if Anthropic changes their
             // API in the future, our code still works because we specified
             // the version. "2023-06-01" is the version date.
             request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
@@ -310,11 +310,11 @@ class ClaudeService {
             // a standard HTTP header that describes what kind of data
             // is in the request body. "application/json" means JSON format.
             request.setValue("application/json", forHTTPHeaderField: "content-type")
-            // Attach the JSON data to the request body — this is the
+            // Attach the JSON data to the request body, this is the
             // actual content we're sending to the server. Without this,
             // we'd be sending an empty request.
             request.httpBody = jsonData
-            // Set a timeout of 30 seconds — if the server doesn't
+            // Set a timeout of 30 seconds, if the server doesn't
             // respond within this time, the request fails automatically.
             // This prevents the app from hanging forever if the network
             // is slow or the server is down.
@@ -335,7 +335,7 @@ class ClaudeService {
             // nil (meaning "no result").
             guard let httpResponse = response as? HTTPURLResponse,
                   httpResponse.statusCode == 200 else {
-                // Log the error for debugging — this tells us the API
+                // Log the error for debugging, this tells us the API
                 // didn't return a successful response.
                 print("Claude API error")
                 // Return nil to indicate we have no valid result.
@@ -355,22 +355,22 @@ class ClaudeService {
             guard let content = json?["content"] as? [[String: Any]],
                   // Get the first content block from the array.
                   let firstBlock = content.first,
-                  // Extract the "text" string from the content block —
+                  // Extract the "text" string from the content block,
                   // this is Claude's actual written response.
                   let fullText = firstBlock["text"] as? String else {
-                // If any of the above unwrappings fail, return nil —
+                // If any of the above unwrappings fail, return nil,
                 // we couldn't understand the response format.
                 return nil
             }
 
             // Extract just the spoken text from the full response.
             // Claude returns a structured format with "RESPONSE:" and
-            // "ACTIONS:" sections — this function parses out the spoken
+            // "ACTIONS:" sections, this function parses out the spoken
             // part (what the AI says out loud).
             let spokenText = extractSpokenText(from: fullText)
             // Extract the list of actions from the full response.
             // Claude might say "I'll search for that" AND include a
-            // "search_web" action — this function picks out the actions.
+            // "search_web" action, this function picks out the actions.
             let actions = extractActions(from: fullText)
 
             // Return a ClaudeResult containing both the spoken text
@@ -378,7 +378,7 @@ class ClaudeService {
             // the app will use to speak to the user and perform tasks.
             return ClaudeResult(spokenText: spokenText, actions: actions)
         }
-        // Close the do block and start the catch block — this runs if
+        // Close the do block and start the catch block, this runs if
         // any operation in the do block threw an error.
         catch {
             // Print the error description to the debug console so
@@ -390,7 +390,7 @@ class ClaudeService {
         }
     }
 
-    // ── processWithOllama() — Offline: calls local Ollama/Llama ─────
+    // ── processWithOllama(), Offline: calls local Ollama/Llama ─────
     // Ollama is a FREE program that runs AI models locally on your
     // computer. It exposes an HTTP API at http://localhost:11434.
     //
@@ -398,13 +398,13 @@ class ClaudeService {
     //   1. Download Ollama from: https://ollama.ai
     //   2. Install it (it's a normal app installer)
     //   3. Open Terminal and run: ollama pull llama3.2
-    //      (this downloads a ~2GB model — takes a few minutes)
+    //      (this downloads a ~2GB model, takes a few minutes)
     //   4. Keep Ollama running in the background
     //   5. Set AI_MODE=offline in the scheme's environment variables
     //
-    // The Ollama API is simpler than Claude's — we send a POST with
+    // The Ollama API is simpler than Claude's, we send a POST with
     // a "prompt" string and get back {"response": "..."}.
-    // This function works the same way as processWithClaude — it sends
+    // This function works the same way as processWithClaude, it sends
     // user text to the AI and returns structured ClaudeResult.
     private func processWithOllama(
         _ userText: String,
@@ -442,7 +442,7 @@ class ClaudeService {
             // The system prompt that defines the AI's personality.
             // This is sent as a separate field in Ollama's API.
             "system": systemPrompt,
-            // Disable streaming — we want Ollama to generate the
+            // Disable streaming, we want Ollama to generate the
             // complete response before returning. If set to true,
             // Ollama would send chunks of text as it generates them,
             // which requires more complex parsing.
@@ -451,7 +451,7 @@ class ClaudeService {
             // control how the model behaves.
             "options": [
                 // Maximum number of tokens (words/parts of words) to
-                // generate. 512 tokens is about 400 words — enough for
+                // generate. 512 tokens is about 400 words, enough for
                 // a useful response without letting the AI ramble.
                 "num_predict": 512
             ]
@@ -463,14 +463,14 @@ class ClaudeService {
         // happen when Ollama isn't running).
         do {
             // Create the URL for Ollama's generate endpoint.
-            // Ollama runs on localhost (this iPhone/iPad — actually
+            // Ollama runs on localhost (this iPhone/iPad, actually
             // on the same computer when running in the simulator).
             // Port 11434 is the default port that Ollama listens on.
             let ollamaURL = URL(string: "http://localhost:11434/api/generate")!
 
             // Create a URLRequest for the Ollama endpoint.
             var request = URLRequest(url: ollamaURL)
-            // Set the HTTP method to POST — we're sending data to
+            // Set the HTTP method to POST, we're sending data to
             // the server (the prompt) and expecting a response back.
             request.httpMethod = "POST"
             // Tell the server we're sending JSON data in the body.
@@ -481,7 +481,7 @@ class ClaudeService {
             // `try` because JSONSerialization can throw an error if
             // the dictionary contains unsupported types.
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
-            // Set a timeout of 60 seconds — Ollama can be slow on
+            // Set a timeout of 60 seconds, Ollama can be slow on
             // smaller machines, especially the first time a model
             // is loaded. We give it twice as long as Claude's timeout.
             request.timeoutInterval = 60
@@ -501,7 +501,7 @@ class ClaudeService {
                   httpResponse.statusCode == 200 else {
                 // Log the error status code for debugging.
                 print("Ollama returned error status")
-                // Return nil — we couldn't get a valid response.
+                // Return nil, we couldn't get a valid response.
                 return nil
             }
 
@@ -511,7 +511,7 @@ class ClaudeService {
             //   {"model": "llama3.2", "response": "...", "done": true}
             guard let json = try JSONSerialization.jsonObject(with: data)
                     as? [String: Any],
-                  // Extract the "response" field — this is the text the
+                  // Extract the "response" field, this is the text the
                   // AI generated. It's a plain string (not a complex
                   // structure like Claude's content blocks).
                   let fullText = json["response"] as? String else {
@@ -554,10 +554,10 @@ class ClaudeService {
         }
     }
 
-    // ── extractSpokenText() — Gets the "RESPONSE:" portion ─────────
+    // ── extractSpokenText(), Gets the "RESPONSE:" portion ─────────
     // Define a private helper function that extracts just the spoken
     // text part from the AI's full structured response. Private means
-    // only this class can use it — other code doesn't need to know
+    // only this class can use it, other code doesn't need to know
     // about this internal parsing logic. It takes the full text string
     // and returns just the spoken portion.
     private func extractSpokenText(from fullText: String) -> String {
@@ -583,18 +583,18 @@ class ClaudeService {
                 // (spaces, newlines) from both ends.
                 return String(afterResponse[..<actionsRange.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
             }
-            // Close the inner if block — if "ACTIONS:" wasn't found,
+            // Close the inner if block, if "ACTIONS:" wasn't found,
             // just return everything after "RESPONSE:" (trimmed), since
             // there are no actions to separate it from.
             return String(afterResponse).trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        // Close the outer if block — if "RESPONSE:" wasn't found at
+        // Close the outer if block, if "RESPONSE:" wasn't found at
         // all, return the original full text unchanged (we don't know
         // how to parse it, so just use it as-is).
         return fullText
     }
 
-    // ── extractActions() — Gets the "ACTIONS:" portion ─────────────
+    // ── extractActions(), Gets the "ACTIONS:" portion ─────────────
     // Define a private helper function that extracts the list of
     // actions from the AI's full structured response. It returns an
     // array of ClaudeAction objects. If no actions are found, it
@@ -609,7 +609,7 @@ class ClaudeService {
         // return the empty array. `guard let` is like "if we can find
         // the range, continue; otherwise, return early".
         guard let actionsRange = fullText.range(of: "ACTIONS:") else {
-            // Return the empty actions array — no actions available.
+            // Return the empty actions array, no actions available.
             return actions
         }
 
@@ -633,7 +633,7 @@ class ClaudeService {
             let lines = block.trimmingCharacters(in: .whitespacesAndNewlines)
                 .components(separatedBy: "\n")
 
-            // Get the first line of the block — this should be the
+            // Get the first line of the block, this should be the
             // action type (like "search_web" or "send_sms"). We trim
             // any extra whitespace from it. `lines.first` returns an
             // optional (might be nil if the block is empty).
@@ -657,11 +657,11 @@ class ClaudeService {
                 // Remove leading/trailing whitespace from the current
                 // line so we can check its content cleanly.
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
-                // Check if this line says "params:" — if so, the
+                // Check if this line says "params:", if so, the
                 // following lines contain the parameter key-value pairs.
                 // We toggle our flag to true to start collecting params.
                 if trimmed == "params:" {
-                    // Set the flag to true — subsequent lines should be
+                    // Set the flag to true, subsequent lines should be
                     // treated as parameter key-value pairs.
                     inParams = true
                 }
@@ -669,12 +669,12 @@ class ClaudeService {
                 // contains a colon (which separates keys from values).
                 // `firstIndex(of:)` finds the first colon in the line.
                 else if inParams, let colonIndex = trimmed.firstIndex(of: ":") {
-                    // Extract the key — everything before the colon.
+                    // Extract the key, everything before the colon.
                     // `..<colonIndex` means "up to but not including
                     // the colon". Trim whitespace in case there are
                     // spaces around the colon.
                     let key = String(trimmed[..<colonIndex]).trimmingCharacters(in: .whitespaces)
-                    // Extract the value — everything after the colon.
+                    // Extract the value, everything after the colon.
                     // `index(after: colonIndex)` skips past the colon
                     // character itself. Trim whitespace here too.
                     let value = String(trimmed[trimmed.index(after: colonIndex)...]).trimmingCharacters(in: .whitespaces)

@@ -1,5 +1,5 @@
 // ───────────────────────────────────────────────────────────────────
-// SettingsActivity.kt — lets the user view/edit API keys at runtime
+// SettingsActivity.kt, lets the user view/edit API keys at runtime
 // ───────────────────────────────────────────────────────────────────
 // Launched from MainActivity's gear icon. Shows two fields (Anthropic
 // API key, Picovoice access key), each with a "Save" and a "Use

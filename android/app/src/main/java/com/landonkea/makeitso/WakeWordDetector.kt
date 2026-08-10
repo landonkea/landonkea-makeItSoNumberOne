@@ -1,8 +1,8 @@
 // ───────────────────────────────────────────────────────────────────
-// WakeWordDetector.kt — listens for "Computer" (Android)
+// WakeWordDetector.kt, listens for "Computer" (Android)
 // ───────────────────────────────────────────────────────────────────
 // This module detects the wake word "Computer" using Picovoice
-// Porcupine — the same engine as the desktop version.
+// Porcupine, the same engine as the desktop version.
 //
 // Porcupine runs entirely on-device (no internet needed) and is
 // very battery-efficient. It listens continuously and only "wakes
@@ -28,7 +28,7 @@
 package com.landonkea.makeitso
 
 // ── Android system imports ────────────────────────────────────────
-// Context gives access to the app's resources and assets — Porcupine
+// Context gives access to the app's resources and assets, Porcupine
 // needs it to load its native model from the APK.
 import android.content.Context
 // AudioRecord is the Android API for capturing raw audio frames
@@ -38,7 +38,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 
 // ── Coroutine imports ─────────────────────────────────────────────
-// Dispatchers provides thread pools — IO for audio capture work.
+// Dispatchers provides thread pools, IO for audio capture work.
 import kotlinx.coroutines.Dispatchers
 // withContext lets us switch which coroutine dispatcher we run on.
 import kotlinx.coroutines.withContext
@@ -58,7 +58,7 @@ import kotlinx.coroutines.currentCoroutineContext
 // The library is provided by the porcupine-android AAR dependency.
 import ai.picovoice.porcupine.Porcupine
 // BuiltInKeyword lists the pre-built wake words that ship with
-// Porcupine — we use "COMPUTER" (matching the desktop version).
+// Porcupine, we use "COMPUTER" (matching the desktop version).
 import ai.picovoice.porcupine.Porcupine.BuiltInKeyword
 
 // ── Callback interface ────────────────────────────────────────────
@@ -74,7 +74,7 @@ interface WakeWordCallback {
 // WakeWordDetector is now a CLASS (not a singleton object) because
 // each instance holds its own Porcupine engine handle.
 class WakeWordDetector(
-    // The Android Context (application/activity) — Porcupine's Builder
+    // The Android Context (application/activity), Porcupine's Builder
     // needs it to load the native model bundled in the APK.
     private val context: Context,
     // The Picovoice Access Key from console.picovoice.ai.
@@ -157,7 +157,7 @@ class WakeWordDetector(
             // Build a microphone AudioRecord that's configured to match exactly what Porcupine
             // expects (sample rate, mono channel, 16-bit PCM). Extracted into its own function
             // because "configure and open the microphone" is a distinct job from "read frames
-            // and ask Porcupine about each one" below — keeping them separate makes each easier
+            // and ask Porcupine about each one" below, keeping them separate makes each easier
             // to reason about on its own.
             val record = createAudioRecordFor(engine)
             audioRecord = record
@@ -177,7 +177,7 @@ class WakeWordDetector(
             // Return false so the caller knows detection failed.
             return@withContext false
         } finally {
-            // Always stop and release the microphone here — whether
+            // Always stop and release the microphone here, whether
             // we returned true, false, or hit an exception above.
             // Previously this cleanup only ran on the "happy paths",
             // so an exception mid-read (or cancellation) would leak
@@ -187,7 +187,7 @@ class WakeWordDetector(
                     it.stop()
                 } catch (e: Exception) {
                     // stop() throws if recording never actually
-                    // started — safe to ignore, we're releasing anyway.
+                    // started, safe to ignore, we're releasing anyway.
                 }
                 it.release()
             }
@@ -198,7 +198,7 @@ class WakeWordDetector(
     // ── Build a microphone AudioRecord tuned for Porcupine ───────
     // Porcupine is picky about its input format (a specific sample rate, mono channel, and
     // 16-bit PCM encoding), so this function reads those requirements off the engine and opens
-    // an AudioRecord that matches exactly. It does NOT start recording — that's the caller's
+    // an AudioRecord that matches exactly. It does NOT start recording, that's the caller's
     // job, since "build the recorder" and "use the recorder" are different responsibilities.
     private fun createAudioRecordFor(engine: Porcupine): AudioRecord {
         // Porcupine records at 16 kHz (sampleRate = 16000).
@@ -256,7 +256,7 @@ class WakeWordDetector(
             val keywordIndex = engine.process(buffer)
             // If keywordIndex >= 0, "Computer" was detected!
             if (keywordIndex >= 0) {
-                // Return true — wake word was spoken. The caller's `finally` block still
+                // Return true, wake word was spoken. The caller's `finally` block still
                 // releases the mic either way.
                 return true
             }

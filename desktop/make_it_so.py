@@ -5,22 +5,22 @@
 # It's like a label on the file that says "I need Python to run."
 
 # ───────────────────────────────────────────────────────────────────
-# make_it_so.py — Main entry point for Make It So Number One
+# make_it_so.py, Main entry point for Make It So Number One
 # ───────────────────────────────────────────────────────────────────
 # This is the main loop of the entire voice assistant.
 # It runs forever, waiting for "Computer" and then processing
 # whatever the user says.
 #
 # THE LOOP (runs until Ctrl+C):
-#   1. 🌙  SLEEP — listening for wake word "Computer"
-#   2. 🔺  WAKE — "Computer" heard!
-#   3. 🔔  CHIME — play Star Trek acknowledgment sound
-#   4. 🎤  LISTEN — record user's voice
-#   5. 📝  TRANSCRIBE — convert speech to text (Whisper)
-#   6. 🧠  THINK — send text to Claude
-#   7. 🔊  SPEAK — Claude's response spoken aloud
-#   8. 🎯  ACT — execute Claude's actions (open apps, search, etc.)
-#   9. 🔄  LOOP — go back to step 1
+#   1. 🌙  SLEEP, listening for wake word "Computer"
+#   2. 🔺  WAKE, "Computer" heard!
+#   3. 🔔  CHIME, play Star Trek acknowledgment sound
+#   4. 🎤  LISTEN, record user's voice
+#   5. 📝  TRANSCRIBE, convert speech to text (Whisper)
+#   6. 🧠  THINK, send text to Claude
+#   7. 🔊  SPEAK, Claude's response spoken aloud
+#   8. 🎯  ACT, execute Claude's actions (open apps, search, etc.)
+#   9. 🔄  LOOP, go back to step 1
 #
 # USAGE
 # -----
@@ -54,7 +54,7 @@ import time
 
 # Import `json` to persist conversation history to disk between runs
 # (see save_conversation_history() / load_conversation_history()
-# below) — history was previously in-memory only and lost every
+# below), history was previously in-memory only and lost every
 # restart.
 import json
 
@@ -95,7 +95,7 @@ def main():
 
     # ── Load configuration ───────────────────────────────────────
     # API keys and settings are stored in config.yaml (NOT
-    # committed to git — you create it from config.example.yaml).
+    # committed to git, you create it from config.example.yaml).
     # Call the `load_config` function (defined below) to read the
     # YAML file and return its contents as a dictionary.
     config = load_config()
@@ -108,14 +108,14 @@ def main():
     # ── Track conversation history (for context) ─────────────────
     # Claude remembers previous exchanges so you can have a
     # natural conversation (like "Open Safari" then "Search for
-    # pizza places" — it knows the context).
+    # pizza places", it knows the context).
     # Load whatever history was saved from the last run (see
     # save_conversation_history() below) so context survives a
     # restart, instead of always starting from an empty list.
     conversation_history = load_conversation_history()
 
     # ── Load routines (trigger-phrase macros, see core/routines.py) ─
-    # Loaded once at startup, same as config — routines.yaml is
+    # Loaded once at startup, same as config, routines.yaml is
     # optional local user data (like config.yaml), so a missing or
     # broken file just means "no routines," never a startup failure.
     from core import routines as routines_module
@@ -123,7 +123,7 @@ def main():
 
     # ── Load personalization profile(s) (see core/profile.py) ─────
     # Same "optional, never fatal" treatment as routines.yaml/
-    # config.yaml — a missing or broken profile.yaml just means no
+    # config.yaml, a missing or broken profile.yaml just means no
     # name/preferred-apps/contact-nickname personalization happens.
     # `profile_store` is mutated in place by a "switch to X's
     # profile" voice command (see _maybe_switch_profile() below), the
@@ -141,18 +141,18 @@ def main():
     # ── MAIN LOOP ────────────────────────────────────────────────
     # This loop runs forever, processing one command at a time.
     # Press Ctrl+C at any time to exit gracefully.
-    # `while True:` creates an infinite loop — it keeps running until
+    # `while True:` creates an infinite loop, it keeps running until
     # we explicitly break out of it or the program is killed.
     while True:
         # Try to run all the steps below. If ANYTHING goes wrong, we
         # catch the error instead of crashing. This makes the program
-        # resilient — it keeps running even after mistakes.
+        # resilient, it keeps running even after mistakes.
         try:
             # `run_one_conversation_cycle` does everything from "wait
             # for the wake word" through "speak the reply and run any
             # actions." It's pulled out into its own function (below)
             # so this loop's job is just "run one cycle, and decide
-            # whether to keep looping" — the details of what a cycle
+            # whether to keep looping", the details of what a cycle
             # involves live in one focused place instead of inline
             # here.
             keep_running = run_one_conversation_cycle(
@@ -172,7 +172,7 @@ def main():
             # 10 user + 10 assistant exchanges = 10 conversations).
             if len(conversation_history) > 20:
                 # If it's too long, keep only the LAST 20 messages.
-                # `[-20:]` is Python slice notation — it means "from
+                # `[-20:]` is Python slice notation, it means "from
                 # the 20th-from-last item to the end." This prevents
                 # the list from growing forever and using too much memory.
                 conversation_history = conversation_history[-20:]
@@ -195,7 +195,7 @@ def main():
             break
 
         # Catch ANY other unexpected error. This is a safety net so
-        # the program doesn't crash on minor problems — it just logs
+        # the program doesn't crash on minor problems, it just logs
         # the error and restarts the loop.
         except Exception as e:
             # Print the error message so the developer knows something
@@ -234,14 +234,14 @@ def run_one_conversation_cycle(
         returning a new list, since the caller needs to keep using
         the same list across every cycle of the main loop.
     routines : dict or None
-        Loaded from core.routines.load_routines() at startup — maps
+        Loaded from core.routines.load_routines() at startup, maps
         trigger phrase -> {"response", "actions"}. If what the user
         said matches a trigger phrase, we run that routine's canned
         actions directly and skip the AI round-trip entirely. None or
-        {} (the common case — no routines.yaml) just means every
+        {} (the common case, no routines.yaml) just means every
         request goes to the AI exactly as before this feature existed.
     profile_store : dict or None
-        Loaded from core.profile.load_profiles() at startup — see
+        Loaded from core.profile.load_profiles() at startup, see
         that module for the {"profiles", "active"} shape. A "switch
         to X's profile" utterance is detected and handled BEFORE
         routine/AI matching (mutating profile_store["active"] in
@@ -256,7 +256,7 @@ def run_one_conversation_cycle(
     -------
     bool
         True to keep the main loop running (this is the normal case
-        — even a cycle where the user said nothing understandable
+       , even a cycle where the user said nothing understandable
         still returns True so we go back to listening). False only
         when the wake word listener itself reports a fatal setup
         problem, signaling the whole program should stop.
@@ -294,8 +294,8 @@ def run_one_conversation_cycle(
     # A fresh SpeechQueue per turn. Its enqueue() is handed to
     # _ask_ai() as the on_sentence callback (see core/ai.py's
     # process_with_claude_streaming()): if the online Claude path is
-    # used, each sentence of the reply is enqueued — and starts
-    # playing on SpeechQueue's background worker thread — the moment
+    # used, each sentence of the reply is enqueued, and starts
+    # playing on SpeechQueue's background worker thread, the moment
     # it's ready, while the rest of the reply may still be
     # generating. If the offline Ollama path is used instead (or the
     # online call fails outright), on_sentence is simply never
@@ -325,7 +325,7 @@ def _active_profile(profile_store):
     """
     Return the currently-active profile dict from `profile_store`
     (see core/profile.py:get_active_profile()), or None if no
-    profiles are configured — kept as a thin wrapper so call sites
+    profiles are configured, kept as a thin wrapper so call sites
     above don't need to import core.profile just to read one dict.
     """
     if not profile_store:
@@ -338,7 +338,7 @@ def _maybe_switch_profile(user_text, profile_store):
     """
     Check whether `user_text` is a "switch to X's profile" request
     (see core/profile.py:detect_profile_switch_request()) and, if so,
-    act on it immediately — no AI round-trip, same rationale as
+    act on it immediately, no AI round-trip, same rationale as
     routine matching.
 
     RETURNS
@@ -347,7 +347,7 @@ def _maybe_switch_profile(user_text, profile_store):
         A spoken confirmation/failure reply if `user_text` looked
         like a switch request (whether or not the named profile
         actually matched one that's configured), or None if
-        `user_text` wasn't a switch request at all — the caller
+        `user_text` wasn't a switch request at all, the caller
         should treat None as "keep going, this wasn't about
         profiles."
     """
@@ -381,20 +381,20 @@ def _match_routine(user_text, routines):
 
 def _run_routine(routine, user_text, config, conversation_history, profile=None):
     """
-    Run a matched routine's canned action list directly — no AI
+    Run a matched routine's canned action list directly, no AI
     round-trip. Speaks the routine's canned "response" (if any), runs
     its actions through the SAME action_router.execute_actions() the
     AI path uses, and records the exchange in conversation_history so
     a later AI turn still has full context of what just happened.
 
     profile : dict or None
-        The active personalization profile (see core/profile.py) —
+        The active personalization profile (see core/profile.py),
         passed through to _run_actions() so a routine's canned
         actions (e.g. a "text Mom" routine) get the same contact-
         nickname/preferred-app resolution the AI path gets. None
         just means no resolution happens, same as everywhere else.
     """
-    print(f"  [main] Matched routine — running "
+    print(f"  [main] Matched routine, running "
           f"{len(routine['actions'])} canned action(s), no AI call.")
     spoken_text = routine.get("response", "")
     _record_exchange(conversation_history, user_text, spoken_text)
@@ -426,7 +426,7 @@ def _listen_for_wake_word(config):
     # ── Honor an active sleep_mode (see core/actions/system.py) ──
     # If the user recently said "Computer, stop listening", skip
     # arming the wake-word mic listener entirely until the mute
-    # window passes — this is the whole point of sleep_mode: actually
+    # window passes, this is the whole point of sleep_mode: actually
     # not listening, not just ignoring what's heard. We sleep for the
     # remaining duration in one shot (KeyboardInterrupt still breaks
     # out of a plain time.sleep() the same way it would break out of
@@ -436,7 +436,7 @@ def _listen_for_wake_word(config):
     # while muted.
     if system.is_muted():
         remaining = system.mute_seconds_remaining()
-        print(f"  [main] Sleep mode active — muted for "
+        print(f"  [main] Sleep mode active, muted for "
               f"{int(remaining)} more second(s).")
         time.sleep(remaining)
         print("  [main] Sleep mode ended.")
@@ -494,11 +494,11 @@ def _ask_ai(user_text, config, conversation_history, on_sentence=None):
     Ollama/Llama if offline) and get back what to say and do.
 
     on_sentence : callable or None
-        Forwarded straight to core.ai.process_with_ai() — see that
+        Forwarded straight to core.ai.process_with_ai(), see that
         function's docstring. When given, each complete sentence of
         the ONLINE Claude reply is handed to this callback as soon
         as it's ready (used to start speaking a reply before the
-        rest of it has finished generating — see core/tts.py's
+        rest of it has finished generating, see core/tts.py's
         SpeechQueue). Ignored for the offline Ollama path.
 
     RETURNS
@@ -515,7 +515,7 @@ def _ask_ai(user_text, config, conversation_history, on_sentence=None):
 
 def _new_speech_queue():
     """Create a fresh core.tts.SpeechQueue for one conversation turn
-    (see core/tts.py — a background worker thread that speaks
+    (see core/tts.py, a background worker thread that speaks
     enqueued sentences strictly in order, one at a time)."""
     from core import tts
     return tts.SpeechQueue()
@@ -528,12 +528,12 @@ def _speak_reply_or_wait_for_stream(speech_queue, result, spoken_text):
     If `result["streamed"]` is True (see core/ai.py's
     process_with_claude_streaming()), every sentence of the reply has
     ALREADY been handed to `speech_queue.enqueue()` as it was
-    generated — this just waits for whatever's still playing/queued
+    generated, this just waits for whatever's still playing/queued
     to finish (speech_queue.close()) and does NOT speak spoken_text
     again, which would say the whole reply a second time.
 
     Otherwise (the offline Ollama path, or a streaming attempt that
-    fell back) nothing has been spoken yet — speech_queue.close() is
+    fell back) nothing has been spoken yet, speech_queue.close() is
     then a harmless no-op (nothing was ever enqueued) and we fall
     back to speaking the whole reply the plain, non-streaming way,
     exactly like before streaming TTS existed.
@@ -571,7 +571,7 @@ def _run_actions(actions, config, profile=None):
     Execute any actions the AI returned (open apps, search, etc.).
 
     profile : dict or None
-        The active personalization profile (see core/profile.py) —
+        The active personalization profile (see core/profile.py),
         passed straight through to action_router.execute_actions()
         so contact nicknames ("Mom") and preferred-app aliases
         ("email") in the actions' params get resolved before
@@ -581,7 +581,7 @@ def _run_actions(actions, config, profile=None):
     -------
     list of str
         One result message per action that ran, e.g. "Opened Safari"
-        or (for a run_command that isn't allowlisted — see
+        or (for a run_command that isn't allowlisted, see
         core/actions/system.py's SECURITY section) a "CONFIRMATION
         REQUIRED: ..." message. Empty list if there were no actions.
     """
@@ -603,7 +603,7 @@ def _handle_action_results(action_results, conversation_history):
     ----------------
     Action results (open_app's "Opened Safari", run_command's
     output, etc.) were previously only ever printed to the terminal
-    for debugging — never spoken aloud, never added to
+    for debugging, never spoken aloud, never added to
     conversation_history. That's fine for a simple "Opened Safari"
     confirmation, but it silently broke the run_command confirmation
     gate (see core/actions/system.py): if a command needs
@@ -627,7 +627,7 @@ def _handle_action_results(action_results, conversation_history):
         if not result or result == "(no result)":
             continue
         # Record every action result so the AI has it as context on
-        # the NEXT turn — most importantly so a pending
+        # the NEXT turn, most importantly so a pending
         # "CONFIRMATION REQUIRED: <command>" message is something
         # the AI can see and correctly react to when the user says
         # "confirm."
@@ -636,7 +636,7 @@ def _handle_action_results(action_results, conversation_history):
             "content": f"ACTION_RESULT: {result}"
         })
         # A pending confirmation is the one kind of action result the
-        # user MUST hear — otherwise they'd have no way to know the
+        # user MUST hear, otherwise they'd have no way to know the
         # assistant is waiting on them before it runs a command.
         if result.startswith("CONFIRMATION REQUIRED"):
             tts.speak(result)
@@ -652,7 +652,7 @@ def load_conversation_history():
         The saved {"role", "content"} exchanges, or an empty list if
         there's no history file yet, it's unreadable, or its content
         isn't the list shape we expect (any of these just means
-        "start fresh" rather than a fatal error — history is a nice-
+        "start fresh" rather than a fatal error, history is a nice-
         to-have, not something worth crashing startup over).
     """
     if not os.path.exists(HISTORY_FILE):
@@ -661,14 +661,14 @@ def load_conversation_history():
         with open(HISTORY_FILE, "r") as f:
             history = json.load(f)
         if not isinstance(history, list):
-            print(f"  [main] {HISTORY_FILE} did not contain a list — "
+            print(f"  [main] {HISTORY_FILE} did not contain a list, "
                   f"starting with empty history.")
             return []
         print(f"  [main] Loaded {len(history)} prior message(s) from "
               f"{HISTORY_FILE}")
         return history
     except (json.JSONDecodeError, OSError) as e:
-        print(f"  [main] Could not read {HISTORY_FILE} ({e}) — "
+        print(f"  [main] Could not read {HISTORY_FILE} ({e}), "
               f"starting with empty history.")
         return []
 
@@ -679,7 +679,7 @@ def save_conversation_history(conversation_history):
 
     Called after every conversation cycle (not just on shutdown) so
     a crash or force-quit doesn't lose everything since the last
-    clean exit. Failures here are logged, not raised — losing the
+    clean exit. Failures here are logged, not raised, losing the
     ability to persist history should never crash the assistant
     mid-conversation.
     """
@@ -692,14 +692,14 @@ def save_conversation_history(conversation_history):
 
 # ── Config schema ──────────────────────────────────────────────────
 # Describes the TYPE (and, where relevant, allowed values) each
-# config.yaml key is expected to have, IF it's present at all — no
+# config.yaml key is expected to have, IF it's present at all, no
 # key here is strictly mandatory (every consumer already falls back
 # sanely via .get() when a key is missing entirely, e.g. an empty
 # API key just means "that provider is unavailable"). What this
 # schema catches is a key that's present but WRONG-TYPED (e.g.
 # `rate: "two hundred"` instead of `rate: 200`), which previously
 # would silently pass load_config() and only blow up later, deep
-# inside whichever module first tried to use it — often with a
+# inside whichever module first tried to use it, often with a
 # confusing error that doesn't obviously point back to config.yaml.
 # Nested dicts (tts, settings, security) get their own sub-schema
 # under "schema", checked recursively by validate_config() below.
@@ -759,13 +759,13 @@ def _type_name(expected_type):
 def validate_config(config, schema=None, path_prefix=""):
     """
     Check `config` against CONFIG_SCHEMA and return a list of
-    human-readable error strings, one per problem found — each one
+    human-readable error strings, one per problem found, each one
     names the EXACT key (dotted path, e.g. "settings.max_history")
     that's missing its expected type or holds an invalid value, so a
     malformed config.yaml can be fixed without guessing which line
     is wrong.
 
-    Every schema key is OPTIONAL — this only flags keys that ARE
+    Every schema key is OPTIONAL, this only flags keys that ARE
     present but wrong-typed or hold an unrecognized value (e.g. a
     "mode" that isn't "auto"/"online"/"offline"), not keys that are
     simply absent.
@@ -785,14 +785,14 @@ def validate_config(config, schema=None, path_prefix=""):
     errors = []
     for key, rule in schema.items():
         if key not in config:
-            continue  # absent is fine — nothing here is mandatory.
+            continue  # absent is fine, nothing here is mandatory.
         value = config[key]
         full_key = f"{path_prefix}{key}"
         expected_type = rule["type"]
 
         # isinstance(True, int) is True in Python, which would let a
         # boolean silently pass an `int`-typed field (e.g. "rate:
-        # true") — explicitly reject that unless bool actually IS the
+        # true"), explicitly reject that unless bool actually IS the
         # expected type.
         type_ok = isinstance(value, expected_type) and not (
             isinstance(value, bool) and expected_type is not bool
@@ -848,7 +848,7 @@ def load_config():
     dict
         Configuration dictionary with API keys and settings.
         Returns an empty dict if config.yaml doesn't exist OR if it
-        exists but isn't valid YAML at all (a syntax error) — in
+        exists but isn't valid YAML at all (a syntax error), in
         both cases we print exactly what's wrong and let startup
         continue with defaults rather than crashing outright.
 
@@ -861,7 +861,7 @@ def load_config():
         porcupine_access_key: "your-key-..."
 
     Every key it contains that IS present is checked against
-    CONFIG_SCHEMA above — a wrong-typed value (e.g. `rate: "fast"`
+    CONFIG_SCHEMA above, a wrong-typed value (e.g. `rate: "fast"`
     instead of a number) is reported by name, not just discovered
     later as a mysterious crash somewhere else in the app.
     """
@@ -885,7 +885,7 @@ def load_config():
             # `yaml.safe_load(f)` reads the file and converts it from
             # YAML text into Python data structures (dicts, lists, etc.).
             # This can raise yaml.YAMLError on a genuine syntax error
-            # (mismatched indentation, an unterminated quote, etc.) —
+            # (mismatched indentation, an unterminated quote, etc.),
             # caught below so a typo in config.yaml can't crash the
             # whole program before it even gets to print a banner.
             try:
@@ -909,7 +909,7 @@ def load_config():
             # Print a message confirming which config file was loaded.
             print(f"  [main] Loaded config from {config_path}")
 
-            # Schema check — report any wrong-typed/invalid value by
+            # Schema check, report any wrong-typed/invalid value by
             # its exact dotted key name (see CONFIG_SCHEMA above).
             errors = validate_config(config)
             if errors:
@@ -942,7 +942,7 @@ def load_config():
 
 
 # Define a function that prints the Star Trek-themed startup banner.
-# It doesn't take any arguments or return any value — it just prints
+# It doesn't take any arguments or return any value, it just prints
 # text to the terminal for visual flair.
 def print_banner():
     """
@@ -981,7 +981,7 @@ def print_banner():
     # Print a separator line.
     print("  ║                                                  ║")
     # Print the version and instruction text.
-    print("  ║     Voice Assistant v1.0 — \"Computer\"           ║")
+    print("  ║     Voice Assistant v1.0, \"Computer\"           ║")
     # Print the main instruction: say "Computer" to start.
     print("  ║     Say \"Computer\" to begin                    ║")
     # Print the bottom border of the banner box.

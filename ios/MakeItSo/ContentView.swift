@@ -4,13 +4,13 @@
 // current state of the assistant (listening, thinking, speaking), and
 // displays whatever Claude says back to the user.
 //
-// The code uses SwiftUI — Apple's modern way to build user interfaces.
+// The code uses SwiftUI, Apple's modern way to build user interfaces.
 // Instead of manually arranging things, we describe WHAT we want on
 // screen and SwiftUI figures out the details. When our "state variables"
 // change, the screen automatically updates to match.
 // ──────────────────────────────────────────────────────────────────────
 
-// Import the SwiftUI framework — this gives us all the tools to build
+// Import the SwiftUI framework, this gives us all the tools to build
 // user interfaces: text labels, buttons, layouts, colors, and more.
 // SwiftUI is Apple's newest UI toolkit, replacing the older UIKit.
 import SwiftUI
@@ -21,7 +21,7 @@ import SwiftUI
 // knows it can render this on the screen. Structs are lightweight
 // data containers in Swift.
 struct ContentView: View {
-    // These are "state variables" — special properties that SwiftUI
+    // These are "state variables", special properties that SwiftUI
     // watches for changes. When any of these change, SwiftUI
     // automatically redraws the parts of the screen that use them.
     // The `@State` attribute tells SwiftUI to manage the storage
@@ -69,16 +69,16 @@ struct ContentView: View {
     // exchanges" context desktop already has. Loaded from disk in onAppear and appended to
     // after every completed cycle in runAssistantCycle() via recordExchange(). @State so a
     // reassignment (e.g. trimming) still triggers SwiftUI to keep the value around across
-    // re-renders — we never actually display it, but @State is also just the simplest way to
+    // re-renders, we never actually display it, but @State is also just the simplest way to
     // keep a mutable value alive for the lifetime of this view.
     @State private var conversationHistory: [ConversationTurn] = []
 
-    // Matches desktop's default (see desktop/config.example.yaml's settings.max_history: 20) —
+    // Matches desktop's default (see desktop/config.example.yaml's settings.max_history: 20),
     // 20 entries = 10 user + 10 assistant turns. Kept as a simple constant here since iOS has
     // no equivalent settings file yet.
     private let maxHistoryTurns = 20
 
-    // Where conversation history is persisted between launches — the app's Documents
+    // Where conversation history is persisted between launches, the app's Documents
     // directory, which (unlike the bundle) is writable and private to this app.
     private var historyFileURL: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -86,18 +86,18 @@ struct ContentView: View {
     }
 
     // Controls whether the Settings sheet (SettingsView.swift) is shown.
-    // Toggled by the gear-icon toolbar button below — the iOS equivalent
+    // Toggled by the gear-icon toolbar button below, the iOS equivalent
     // of Android's gear button that launches SettingsActivity.
     @State private var showingSettings = false
 
     // This is the required property that every View must have. It
     // describes what to draw on screen. SwiftUI calls this whenever
     // it needs to render (or re-render) the screen. `some View` means
-    // "this returns some type that conforms to the View protocol" —
+    // "this returns some type that conforms to the View protocol",
     // we don't need to say exactly which type.
     var body: some View {
         // Wrapped in a NavigationStack solely so we have a toolbar to hang
-        // the Settings gear button on (see .toolbar below) — this view had
+        // the Settings gear button on (see .toolbar below), this view had
         // no navigation chrome before. The rest of the screen is unchanged.
         NavigationStack {
             contentBody
@@ -144,7 +144,7 @@ struct ContentView: View {
             // Create a button that the user can tap. The `action` closure
             // (the code inside { }) runs when the user taps the button.
             // The `label` closure (the second set of { }) defines what
-            // the button looks like — in this case, another Text view.
+            // the button looks like, in this case, another Text view.
             Button(action: {
                 // Call the startAssistant function when the button is
                 // tapped. This begins the whole wake → listen → think
@@ -155,7 +155,7 @@ struct ContentView: View {
                 // This is the label (what the button looks like). We
                 // show different text depending on whether the assistant
                 // is currently processing. The `? :` is a ternary operator
-                // — if isProcessing is true, show the first text; if
+                //, if isProcessing is true, show the first text; if
                 // false, show the second.
                 Text(isProcessing ? "🔄 Processing..." : "🎤 Say \"Computer\"")
                     // Use headline font (slightly bigger than body but
@@ -185,7 +185,7 @@ struct ContentView: View {
             .padding(.horizontal)
 
             // Show the AI's response text only if it's not empty.
-            // The `if` condition checks `!lastResponse.isEmpty` — the
+            // The `if` condition checks `!lastResponse.isEmpty`, the
             // "!" means "not", so this is "if lastResponse is NOT empty".
             if !lastResponse.isEmpty {
                 // A vertical stack for the response section, aligned
@@ -340,7 +340,7 @@ struct ContentView: View {
     //   - ONLINE: sends text to Claude API (needs internet)
     //   - OFFLINE: sends text to local Ollama (runs on your machine)
     //   - AUTO: tries online first, falls back to offline on failure
-    // This is transparent to the ContentView — it just calls process()
+    // This is transparent to the ContentView, it just calls process()
     // and gets back a result regardless of which AI provider was used.
     private func runAssistantCycle() async {
         // STEP 1: Show that we're waiting for the wake word "Computer".
@@ -349,7 +349,7 @@ struct ContentView: View {
 
         // On a real iPhone, we'd use SFSpeechRecognizer to continuously
         // listen for the wake word. For this first version, the button
-        // tap IS the wake word trigger — tapping the button is like
+        // tap IS the wake word trigger, tapping the button is like
         // saying "Computer". A dedicated wake word engine (like Porcupine
         // from Picovoice) can be added later for hands-free activation.
 
@@ -365,12 +365,12 @@ struct ContentView: View {
         updateState("🎧 Listening for your command...")
         // Call SpeechManager to start recording and transcribing speech.
         // The `await` pauses until the user stops speaking and we have
-        // the transcribed text. `guard let` unwraps the optional — if
+        // the transcribed text. `guard let` unwraps the optional, if
         // recognition failed (returned nil), we show an error and exit.
         guard let speechText = await SpeechManager.shared.recognize() else {
             // Show a message telling the user we couldn't hear them.
             updateState("Could not hear you. Try again.")
-            // Exit the function — we can't proceed without user input.
+            // Exit the function, we can't proceed without user input.
             return
         }
         // Close the guard else block.
@@ -391,13 +391,13 @@ struct ContentView: View {
         ) else {
             // Show an error message if we couldn't get a valid response.
             updateState("AI did not respond. Check your connection or Ollama.")
-            // Exit — we can't proceed without a valid response.
+            // Exit, we can't proceed without a valid response.
             return
         }
         // Close the guard else block.
 
         // Record this exchange in conversation history BEFORE speaking/acting, mirroring
-        // desktop's _record_exchange() — so even if a later step fails, the turn we already
+        // desktop's _record_exchange(), so even if a later step fails, the turn we already
         // got a response for is remembered on the next cycle. Runs on the main actor since it
         // mutates the @State conversationHistory property.
         await MainActor.run {
@@ -448,7 +448,7 @@ struct ContentView: View {
         // Update the state to show that everything completed successfully
         // and the user can start again by saying "Computer".
         updateState("✅ Complete. Say 'Computer' again.")
-        // Close the function — the cycle is finished.
+        // Close the function, the cycle is finished.
     }
     // Close the runAssistantCycle function.
 
@@ -468,7 +468,7 @@ struct ContentView: View {
     // ── Record this turn in conversation history, then persist it ─
     // Appends the user's speech and the assistant's spoken reply to conversationHistory (in the
     // same {role, content} shape ClaudeService expects back), trims it to the last
-    // maxHistoryTurns entries, and saves it to disk immediately — mirroring desktop's
+    // maxHistoryTurns entries, and saves it to disk immediately, mirroring desktop's
     // per-cycle save_conversation_history() call so a crash or force-quit between cycles
     // doesn't lose the conversation. Must run on the main actor since it mutates the @State
     // conversationHistory property (see the MainActor.run call site above).
@@ -476,7 +476,7 @@ struct ContentView: View {
     private func recordExchange(userText: String, spokenText: String) {
         conversationHistory.append(ConversationTurn(role: "user", content: userText))
         // Assistant turns are stored as "RESPONSE: <spokenText>" to match the RESPONSE:/ACTIONS:
-        // format the shared system prompt asks for — a replayed assistant turn then looks
+        // format the shared system prompt asks for, a replayed assistant turn then looks
         // exactly like a normal reply would, instead of a bare, format-less sentence.
         conversationHistory.append(ConversationTurn(role: "assistant", content: "RESPONSE: \(spokenText)"))
         // Keep only the most recent maxHistoryTurns entries.
@@ -488,15 +488,15 @@ struct ContentView: View {
     // Close the recordExchange function.
 
     // ── Load conversation history saved by a previous launch, if any ─
-    // Returns an empty array (rather than throwing) for every failure case — missing file,
-    // unreadable file, corrupt JSON — since history is a nice-to-have, not something worth
+    // Returns an empty array (rather than throwing) for every failure case, missing file,
+    // unreadable file, corrupt JSON, since history is a nice-to-have, not something worth
     // crashing startup over. Mirrors desktop's load_conversation_history().
     private func loadConversationHistory() -> [ConversationTurn] {
         guard let data = try? Data(contentsOf: historyFileURL) else {
             return []
         }
         guard let turns = try? JSONDecoder().decode([ConversationTurn].self, from: data) else {
-            print("Could not decode \(historyFileURL.lastPathComponent) — starting with empty history.")
+            print("Could not decode \(historyFileURL.lastPathComponent), starting with empty history.")
             return []
         }
         return turns
@@ -504,7 +504,7 @@ struct ContentView: View {
     // Close the loadConversationHistory function.
 
     // ── Persist conversation history to disk ──────────────────────
-    // Writes the current history as JSON — the exact shape loadConversationHistory() above
+    // Writes the current history as JSON, the exact shape loadConversationHistory() above
     // reads back. Failures are logged, not raised: losing the ability to persist history
     // should never crash the assistant mid-conversation.
     private func saveConversationHistory(_ history: [ConversationTurn]) {
@@ -533,7 +533,7 @@ struct ContentView: View {
             AudioManager.shared.playSound(url)
             // Close the if body.
         }
-        // Close the if statement — if the file wasn't found, we silently
+        // Close the if statement, if the file wasn't found, we silently
         // skip playing the chime (better than crashing).
     }
     // Close the playChime function.
@@ -558,13 +558,13 @@ struct ContentView: View {
     // automatically restarts detection for continuous hands-free use.
     //
     // If no PICOVOICE_ACCESS_KEY is set, this function prints a message
-    // and returns immediately — the assistant works via button only.
+    // and returns immediately, the assistant works via button only.
     private func startWakeWordDetection() {
         // Read the Picovoice access key from SettingsStore, which returns
         // the user's saved Keychain value if they set one in Settings, or
         // falls back to the PICOVOICE_ACCESS_KEY environment variable
         // (set in the Xcode scheme's environment variables) otherwise.
-        // This is read once per call, same as before — the Settings UI
+        // This is read once per call, same as before, the Settings UI
         // (SettingsView.swift) tells the user a restart is required for a
         // newly-saved Picovoice key to take effect, since wake-word
         // detection is only (re)initialized here, at startup / on each
@@ -578,13 +578,13 @@ struct ContentView: View {
         guard !accessKey.isEmpty else {
             // Log that wake word is disabled so developers remember to
             // set the environment variable in the Xcode scheme.
-            print("PICOVOICE_ACCESS_KEY not set — wake word detection disabled. Set it in Edit Scheme → Run → Arguments → Environment Variables.")
-            // Exit the function — no detection loop to start.
+            print("PICOVOICE_ACCESS_KEY not set, wake word detection disabled. Set it in Edit Scheme → Run → Arguments → Environment Variables.")
+            // Exit the function, no detection loop to start.
             return
         }
 
         // Create a WakeWordService instance with the access key. This
-        // doesn't start listening yet — it just stores the key for later
+        // doesn't start listening yet, it just stores the key for later
         // use. The actual detection begins when detect() is called below.
         // We store the service as a state variable so we can access it
         // from other methods (like stopWakeWordDetection).
@@ -612,7 +612,7 @@ struct ContentView: View {
             // Enter the main detection loop. We use a while loop with a
             // Task.isCancelled check so the loop exits cleanly when the
             // task is cancelled (e.g., from onDisappear or button press).
-            // The loop runs indefinitely until cancelled — each iteration
+            // The loop runs indefinitely until cancelled, each iteration
             // waits for a wake word, processes it, then loops back.
             while !Task.isCancelled {
                 // Wait for the "Computer" wake word. The detect() function
@@ -640,7 +640,7 @@ struct ContentView: View {
                     // send to AI → speak response → execute actions.
                     // We reuse the existing runAssistantCycle to keep
                     // the flow consistent between button and wake word.
-                    // NOTE: We do NOT call playChime() here — we used to,
+                    // NOTE: We do NOT call playChime() here, we used to,
                     // but runAssistantCycle() already plays the chime at
                     // its own STEP 2 ("'Computer' detected!"), so calling
                     // it here too made the chime play twice on every
@@ -663,7 +663,7 @@ struct ContentView: View {
                 // processing, the loop just continues to the next
                 // detect() call, effectively retrying indefinitely.
             }
-            // Close the while loop — the task was cancelled or the view
+            // Close the while loop, the task was cancelled or the view
             // was dismissed, so we stop detecting.
         }
         // Close the Task initializer.
@@ -675,7 +675,7 @@ struct ContentView: View {
     //   - The view disappears (to avoid background battery drain)
     //   - The app enters the background (App Store compliance)
     //
-    // This function is safe to call multiple times — subsequent calls
+    // This function is safe to call multiple times, subsequent calls
     // are no-ops once the task is cancelled and the service is destroyed.
     private func stopWakeWordDetection() {
         // Cancel the wake word detection Task. This sets the cancellation
@@ -729,14 +729,14 @@ struct ContentView: View {
                 }
                 // Close the Task block.
             }
-            // Close the if block — if granted is true, we don't need to
+            // Close the if block, if granted is true, we don't need to
             // do anything because the mic will work when needed.
         }
         // Close the requestRecordPermission call.
         #else
         // On non-iOS platforms, microphone permission is not applicable.
         // We assume access is available and don't show a permission dialog.
-        print("requestMicrophonePermission() skipped — not on iOS.")
+        print("requestMicrophonePermission() skipped, not on iOS.")
         #endif
     }
     // Close the requestMicrophonePermission function.
@@ -772,7 +772,7 @@ class AudioManager {
             // audio data into memory and prepares it for playback.
             // `try` because this can throw an error if the file is invalid.
             player = try AVAudioPlayer(contentsOf: url)
-            // Start playing the sound. `.play()` is asynchronous — it
+            // Start playing the sound. `.play()` is asynchronous, it
             // plays in the background while the app continues running.
             player?.play()
             // Close the do block.

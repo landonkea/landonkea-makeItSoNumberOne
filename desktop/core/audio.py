@@ -1,5 +1,5 @@
 # ───────────────────────────────────────────────────────────────────
-# audio.py — microphone recording and sound playback
+# audio.py, microphone recording and sound playback
 # ───────────────────────────────────────────────────────────────────
 # This is the audio engine for Make It So Number One.
 # It handles:
@@ -23,8 +23,8 @@ import time
 # These are the shared settings for ALL audio in this app.
 SAMPLE_RATE = 22050   # Number of audio samples per second (22050 Hz
                       # is good enough for voice and simple chimes).
-CHANNELS = 1          # Mono audio (one channel — simpler, smaller).
-SAMPLE_WIDTH = 2      # 16-bit audio (2 bytes per sample — standard
+CHANNELS = 1          # Mono audio (one channel, simpler, smaller).
+SAMPLE_WIDTH = 2      # 16-bit audio (2 bytes per sample, standard
                       # quality for voice).
 SILENCE_THRESHOLD = 500   # Amplitude level below which we consider
                           # it "silence" (used to detect when the
@@ -60,7 +60,7 @@ def _generate_sine_wave(frequency_hz, duration_ms, volume=0.5):
 
     HOW IT WORKS
     ------------
-    A sine wave is the smoothest kind of sound wave — it sounds like
+    A sine wave is the smoothest kind of sound wave, it sounds like
     a pure musical note. The formula is:
         sample = sin(2 * pi * frequency * current_time) * max_amplitude
     where `current_time` increases by 1/SAMPLE_RATE each sample.
@@ -93,7 +93,7 @@ def _generate_silence(duration_ms):
     RETURNS
     -------
     list of int
-        All zeros — these represent silence.
+        All zeros, these represent silence.
     """
     num_samples = int(SAMPLE_RATE * duration_ms / 1000)
     return [0] * num_samples
@@ -106,20 +106,20 @@ def generate_chime(output_path):
 
     The chime sounds like:
         "DING-ding" (two descending tones)
-    - First tone: A5 (880 Hz) — the higher, attention-getting note
+    - First tone: A5 (880 Hz), the higher, attention-getting note
     - Brief silence
-    - Second tone: D5 (587 Hz) — the lower, confirming note
+    - Second tone: D5 (587 Hz), the lower, confirming note
 
     This plays automatically when the wake word "Computer" is
     detected, just like on the Enterprise.
     """
     # Build the chime from individual pieces.
     samples = []
-    # Tone 1: A5 (880 Hz) for 150ms — the "attention" note.
+    # Tone 1: A5 (880 Hz) for 150ms, the "attention" note.
     samples.extend(_generate_sine_wave(880, 150, volume=0.5))
-    # Brief gap of silence (50ms) — separates the two notes.
+    # Brief gap of silence (50ms), separates the two notes.
     samples.extend(_generate_silence(50))
-    # Tone 2: D5 (587 Hz) for 120ms — the "acknowledged" note.
+    # Tone 2: D5 (587 Hz) for 120ms, the "acknowledged" note.
     samples.extend(_generate_sine_wave(587, 120, volume=0.4))
 
     # Write the WAV file using Python's built-in `wave` module.
@@ -146,7 +146,7 @@ def _play_sound_osx(file_path):
     """
     Play a WAV file on macOS using `afplay` (built-in command).
 
-    `afplay` comes with every Mac — no installation required. It
+    `afplay` comes with every Mac, no installation required. It
     plays audio files from the command line and returns when done.
     """
     os.system(f"afplay \"{file_path}\"")
@@ -184,7 +184,7 @@ def play_chime():
     2. Determines the current OS (macOS, Linux, Windows).
     3. Plays the chime using the appropriate method.
 
-    The chime plays when "Computer" is detected — it's the same
+    The chime plays when "Computer" is detected, it's the same
     "I hear you" sound as the Enterprise computer.
     """
     # The chime file lives next to this Python file, in the assets
@@ -226,7 +226,7 @@ def list_microphones():
     """
     Print all available microphone devices.
 
-    This is useful for debugging — it shows you which microphones
+    This is useful for debugging, it shows you which microphones
     the system can see (built-in mic, USB mic, Bluetooth headset,
     etc.). Run this if the app can't hear you.
     """
@@ -319,7 +319,7 @@ def record_until_silence(timeout_seconds=10):
         # ── Clean up ──────────────────────────────────────────
         # This runs whether recording finished normally or raised an
         # exception, so we never leave the microphone hardware
-        # "held open" by a crashed recording — that would block any
+        # "held open" by a crashed recording, that would block any
         # later attempt to record again until the whole app restarts.
         stream.stop_stream()
         stream.close()
@@ -349,14 +349,14 @@ def _chunk_loudness(chunk_bytes):
     RETURNS
     -------
     float
-        The RMS (Root Mean Square) amplitude of the chunk — a
+        The RMS (Root Mean Square) amplitude of the chunk, a
         single number representing how loud it is. 0 means silence;
         larger numbers mean louder sound. RMS is the standard way to
         measure audio loudness because it accounts for every sample
         in the chunk (unlike, say, just taking the single loudest
         sample), and squaring each value before averaging makes
         loud and quiet moments cancel out less than they would with
-        a simple average — which matters because a raw sine wave's
+        a simple average, which matters because a raw sine wave's
         positive and negative halves would otherwise average toward
         zero even during loud speech.
     """
@@ -388,7 +388,7 @@ def _record_chunks_until_silence(
     list of bytes
         The recorded chunks (including the leading silence right
         before speech started, and the trailing pause that signaled
-        the user was done — trimming those isn't necessary for
+        the user was done, trimming those isn't necessary for
         speech-to-text accuracy). Empty list if no speech was ever
         detected.
     """
@@ -403,7 +403,7 @@ def _record_chunks_until_silence(
         # `exception_on_overflow=False` tells PyAudio not to raise an
         # error if our program reads chunks slightly slower than the
         # microphone produces them (a common hiccup under system
-        # load) — we'd rather silently drop a few audio samples than
+        # load), we'd rather silently drop a few audio samples than
         # crash the whole recording.
         data = stream.read(chunk_size, exception_on_overflow=False)
         total_chunks += 1
@@ -415,7 +415,7 @@ def _record_chunks_until_silence(
             if not has_started:
                 print("  [audio] Speech detected!")
                 has_started = True
-            # Reset the silence counter — the user is still talking.
+            # Reset the silence counter, the user is still talking.
             silence_chunks = 0
             frames.append(data)
         else:
@@ -427,7 +427,7 @@ def _record_chunks_until_silence(
                 # Check if the pause is long enough to stop.
                 silence_seconds = silence_chunks * chunk_size / rate
                 if silence_seconds >= silence_limit_seconds:
-                    print("  [audio] Silence detected — stopping.")
+                    print("  [audio] Silence detected, stopping.")
                     break
             # If we haven't started yet, just discard silent chunks.
 

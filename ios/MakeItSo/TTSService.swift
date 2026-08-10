@@ -1,7 +1,7 @@
 // ───────────────────────────────────────────────────────────────────
-// TTSService.swift — speaks text aloud (iOS)
+// TTSService.swift, speaks text aloud (iOS)
 // ───────────────────────────────────────────────────────────────────
-// This module uses AVSpeechSynthesizer — Apple's built-in
+// This module uses AVSpeechSynthesizer, Apple's built-in
 // text-to-speech engine (same as VoiceOver). It works completely
 // offline and supports many voices and languages.
 //
@@ -10,7 +10,7 @@
 // 1. Create an AVSpeechUtterance with the text to speak.
 // 2. Set the voice to the device's default voice for US English
 //    (on most iPhones this is "Samantha", but it can differ if the
-//    user changed their system voice settings — we don't hardcode
+//    user changed their system voice settings, we don't hardcode
 //    a specific voice identifier, we just ask for "en-US" and let
 //    iOS pick whatever voice is installed for that language).
 // 3. Speak it using AVSpeechSynthesizer.
@@ -34,7 +34,7 @@ class TTSService {
 
         // Ask iOS for whatever voice it has installed for the "en-US"
         // (US English) language. We don't hardcode a specific voice
-        // identifier — iOS picks the system default, which is usually
+        // identifier, iOS picks the system default, which is usually
         // "Samantha" out of the box but can be a different voice if the
         // user changed it in Settings > Accessibility > Spoken Content.
         utterance.voice = AVSpeechSynthesisVoice(language: "en-US")

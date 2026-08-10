@@ -1,5 +1,5 @@
 # ───────────────────────────────────────────────────────────────────
-# tests/test_integrations.py — tests for actions/integrations.py
+# tests/test_integrations.py, tests for actions/integrations.py
 # ───────────────────────────────────────────────────────────────────
 # WHY THESE TESTS EXIST
 # ----------------------
@@ -9,7 +9,7 @@
 # parser, all gated behind config.yaml credentials that may or may
 # not be present. These tests cover:
 #   - missing-credential paths return a clear, actionable string
-#     instead of raising (every action here is voice-facing — a
+#     instead of raising (every action here is voice-facing, a
 #     traceback is not something to speak out loud)
 #   - the happy path for each provider, using a fake `requests`
 #     module (no real network access, no real API keys needed to run

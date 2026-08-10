@@ -1,5 +1,5 @@
 # ───────────────────────────────────────────────────────────────────
-# tests/test_sentence_splitter.py — incremental sentence-boundary
+# tests/test_sentence_splitter.py, incremental sentence-boundary
 # detection tests (see core/sentence_splitter.py)
 # ───────────────────────────────────────────────────────────────────
 # WHY THESE TESTS EXIST
@@ -9,7 +9,7 @@
 # (see core/ai.py's process_with_claude_streaming() and core/tts.py's
 # SpeechQueue). It has to (a) recognize real sentence endings, (b)
 # NOT be fooled by abbreviations/decimals/ellipses, and (c) handle
-# text arriving in arbitrary-sized chunks — including a chunk boundary
+# text arriving in arbitrary-sized chunks, including a chunk boundary
 # landing in the middle of a would-be sentence end, or even in the
 # middle of an abbreviation. These tests cover both split_sentences()
 # (whole-string convenience) and feed()/flush() (the actual streaming
@@ -70,7 +70,7 @@ class SplitSentencesTests(unittest.TestCase):
     def test_collapses_ellipsis_run_into_a_single_boundary(self):
         # "..." followed by a space is a confirmed boundary (an
         # ellipsis run collapses to one decision based on what
-        # follows its LAST character) — it does NOT glue this
+        # follows its LAST character), it does NOT glue this
         # sentence to the next one.
         self.assertEqual(
             split_sentences("Well... this is unexpected. Indeed."),
@@ -97,7 +97,7 @@ class IncrementalFeedTests(unittest.TestCase):
         # progress) must NOT be released.
         self.assertEqual(splitter.feed("The reading is 3"), [])
         self.assertEqual(splitter.feed("."), [])
-        # Still ambiguous — no lookahead yet.
+        # Still ambiguous, no lookahead yet.
         self.assertEqual(splitter.feed("14"), [])
         # Now it's clear this was a decimal, not a sentence end, and
         # a real sentence boundary follows.
@@ -143,7 +143,7 @@ class IncrementalFeedTests(unittest.TestCase):
         self.assertEqual(splitter.feed(""), [])
         # A trailing period with nothing after it yet is still
         # ambiguous (could be followed by more text that turns it
-        # into a decimal/abbreviation) — not released until flush().
+        # into a decimal/abbreviation), not released until flush().
         self.assertEqual(splitter.feed("Hi there."), [])
         self.assertEqual(splitter.flush(), ["Hi there."])
 

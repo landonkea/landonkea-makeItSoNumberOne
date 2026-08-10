@@ -1,4 +1,4 @@
-# landonkea-makeItSoNumberOne — Design & Workflow
+# landonkea-makeItSoNumberOne - Design & Workflow
 
 ## High-Level Overview
 

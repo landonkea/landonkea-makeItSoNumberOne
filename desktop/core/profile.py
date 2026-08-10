@@ -1,5 +1,5 @@
 # ───────────────────────────────────────────────────────────────────
-# profile.py — personalization profiles (name, preferred apps,
+# profile.py, personalization profiles (name, preferred apps,
 # contact nicknames) with multi-profile support
 # ───────────────────────────────────────────────────────────────────
 # WHY THIS EXISTS
@@ -7,14 +7,14 @@
 # Personal data (the user's name, which apps they mean by "my email",
 # and nicknames like "Mom" -> a real phone number) doesn't belong in
 # config.yaml (API keys/settings) or routines.yaml (canned action
-# macros) — it's a third, distinct kind of local, personal, never-
+# macros), it's a third, distinct kind of local, personal, never-
 # committed data. This module follows the exact same pattern as
 # core/routines.py: a gitignored YAML file next to config.yaml, a
 # tracked *.example.yaml template, and loader functions that treat a
 # missing/malformed file as "no profiles configured" rather than a
 # startup failure.
 #
-# FILE FORMAT (profile.yaml, next to config.yaml — see
+# FILE FORMAT (profile.yaml, next to config.yaml, see
 # profile.example.yaml for a fuller worked example)
 # --------------------------------------------------
 #   active_profile: landon
@@ -31,12 +31,12 @@
 # For backward-compat / the simplest possible single-user setup, a
 # FLAT file with no "profiles:" wrapper (just name/preferred_apps/
 # contacts at the top level) is also accepted and is treated as one
-# profile named "default" — see _looks_flat() below.
+# profile named "default", see _looks_flat() below.
 #
-# MULTI-PROFILE DESIGN — WHAT'S SHARED VS. PER-PROFILE
+# MULTI-PROFILE DESIGN, WHAT'S SHARED VS. PER-PROFILE
 # -------------------------------------------------------
 # Per-profile (this module): name, preferred_apps, contacts. This is
-# personalization data that is meaningless — or actively wrong — if
+# personalization data that is meaningless, or actively wrong, if
 # applied to the wrong person. Resolving "Mom" to a phone number for
 # whoever is NOT the active profile would be a real (if low-stakes)
 # privacy/correctness bug, not just a cosmetic mismatch.
@@ -58,7 +58,7 @@
 #     (gitignored, capped at 20 entries) rather than durable personal
 #     data.
 #   - config.yaml (API keys, mode, security settings): infrastructure
-#     configuration, not personalization — every profile on the same
+#     configuration, not personalization, every profile on the same
 #     physical machine shares the same API keys and security policy.
 #
 # ACTIVE PROFILE SELECTION
@@ -66,7 +66,7 @@
 # 1. `active_profile:` in profile.yaml is the config-driven default.
 # 2. A voice command ("switch to <name>'s profile") can override it
 #    for the rest of the running session via switch_active_profile()
-#    — see detect_profile_switch_request() for the phrases matched.
+#   , see detect_profile_switch_request() for the phrases matched.
 # A session-only switch is intentional: like config.yaml and
 # routines.yaml, profile.yaml is treated as read-only at runtime, so
 # a voice-triggered switch never silently rewrites the user's own
@@ -79,8 +79,8 @@ import re
 PROFILE_FILE = "profile.yaml"
 
 # Params that identify a contact recipient across different actions
-# (send_sms/make_call on Android & iOS both use "number" today — see
-# ActionRouter.kt / ActionRouter.swift — but "to"/"contact"/
+# (send_sms/make_call on Android & iOS both use "number" today, see
+# ActionRouter.kt / ActionRouter.swift, but "to"/"contact"/
 # "recipient" are included too so any future action, built-in or
 # third-party plugin, that takes a contact-shaped param gets the same
 # nickname resolution for free without this list needing to grow in
@@ -98,7 +98,7 @@ _EMPTY_PROFILE = {"name": "", "preferred_apps": {}, "contacts": {}}
 def _normalize(text):
     """
     Lowercase and strip everything except letters/digits/spaces, and
-    collapse repeated whitespace — mirrors core/routines.py's
+    collapse repeated whitespace, mirrors core/routines.py's
     _normalize() so "Mom", "mom!", and "MOM" all resolve the same
     contact, and "Landon", "landon's", "LANDON" all match the same
     profile.
@@ -113,7 +113,7 @@ def _normalize(text):
 def _looks_flat(data):
     """
     True if `data` looks like a single flat profile (no "profiles:"
-    wrapper) rather than a multi-profile file — i.e. it has none of
+    wrapper) rather than a multi-profile file, i.e. it has none of
     the multi-profile top-level keys but does look like profile
     fields directly.
     """
@@ -130,7 +130,7 @@ def load_profiles(path=PROFILE_FILE):
         {"profiles": {profile_name: {"name", "preferred_apps",
         "contacts"}}, "active": str or None}. Empty profiles + None
         active if the file doesn't exist, is empty, isn't valid YAML,
-        or isn't shaped the way we expect — a broken/missing
+        or isn't shaped the way we expect, a broken/missing
         profile.yaml should never prevent the assistant from starting
         (same philosophy as routines.yaml).
     """
@@ -151,7 +151,7 @@ def load_profiles(path=PROFILE_FILE):
         return empty_store
 
     if not isinstance(data, dict):
-        print(f"  [profile] {path} should be a mapping — ignoring it.")
+        print(f"  [profile] {path} should be a mapping, ignoring it.")
         return empty_store
 
     if _looks_flat(data):
@@ -165,7 +165,7 @@ def load_profiles(path=PROFILE_FILE):
 
     raw_profiles = data.get("profiles", {})
     if not isinstance(raw_profiles, dict):
-        print(f"  [profile] {path}'s \"profiles\" should be a mapping — "
+        print(f"  [profile] {path}'s \"profiles\" should be a mapping, "
               f"ignoring it.")
         raw_profiles = {}
 
@@ -185,11 +185,11 @@ def load_profiles(path=PROFILE_FILE):
 
     if active is not None and active not in profiles:
         print(f"  [profile] active_profile \"{active}\" in {path} has no "
-              f"matching entry under \"profiles\" — ignoring it.")
+              f"matching entry under \"profiles\", ignoring it.")
         active = None
 
     if active is None and profiles:
-        # No explicit active_profile — fall back to the only profile
+        # No explicit active_profile, fall back to the only profile
         # if there's exactly one, so a single-profile multi-profile-
         # shaped file still "just works" without extra config.
         if len(profiles) == 1:
@@ -211,12 +211,12 @@ def _parse_one_profile(name, body):
     dict or None
         {"name": str, "preferred_apps": dict, "contacts": dict}, or
         None if `body` isn't shaped like a usable profile (logged,
-        not raised — one malformed profile shouldn't crash startup or
+        not raised, one malformed profile shouldn't crash startup or
         take down every other profile).
     """
     if not isinstance(body, dict):
         print(f"  [profile] Profile \"{name}\" is malformed (expected a "
-              f"mapping) — skipping it.")
+              f"mapping), skipping it.")
         return None
 
     display_name = body.get("name", name)
@@ -226,7 +226,7 @@ def _parse_one_profile(name, body):
     preferred_apps = body.get("preferred_apps", {})
     if not isinstance(preferred_apps, dict):
         print(f"  [profile] Profile \"{name}\" has a non-mapping "
-              f"\"preferred_apps\" — ignoring it.")
+              f"\"preferred_apps\", ignoring it.")
         preferred_apps = {}
     normalized_apps = {}
     for category, app_name in preferred_apps.items():
@@ -237,7 +237,7 @@ def _parse_one_profile(name, body):
     contacts = body.get("contacts", {})
     if not isinstance(contacts, dict):
         print(f"  [profile] Profile \"{name}\" has a non-mapping "
-              f"\"contacts\" — ignoring it.")
+              f"\"contacts\", ignoring it.")
         contacts = {}
     normalized_contacts = {}
     for nickname, identifier in contacts.items():
@@ -257,7 +257,7 @@ def get_active_profile(store):
     Return the active profile dict from `store` (as returned by
     load_profiles()), or a harmless empty profile
     ({"name": "", "preferred_apps": {}, "contacts": {}}) if none is
-    configured/active — so callers never need a None-check before
+    configured/active, so callers never need a None-check before
     reading profile["contacts"] etc.
     """
     if not store:
@@ -286,7 +286,7 @@ def resolve_contact(profile, nickname):
     str or None
         The resolved identifier, or None if `nickname` doesn't match
         any configured contact for this profile (in which case the
-        caller should leave the original value alone — it might
+        caller should leave the original value alone, it might
         already be a real number/handle Claude filled in itself).
     """
     if not profile or not nickname:
@@ -327,13 +327,13 @@ def resolve_action_params(action_dict, profile):
     before dispatch, so any action whose params look like a contact
     reference (see CONTACT_PARAM_KEYS) or an open_app alias gets a
     chance to be resolved deterministically from the active profile
-    — deterministically, rather than relying on the AI to have
+   , deterministically, rather than relying on the AI to have
     correctly transcribed a phone number from a system-prompt hint,
     which matters because a wrong digit here means a text/call goes
     to the wrong person.
 
     NOTE ON MOBILE (Android/iOS): send_sms/make_call only exist as
-    actions on Android/iOS today (see ActionRouter.kt/.swift) — the
+    actions on Android/iOS today (see ActionRouter.kt/.swift), the
     desktop app has no telephony and doesn't dispatch those actions
     itself. Android and iOS each run their own on-device Claude
     client (ClaudeService.kt/.swift) with no shared runtime state
@@ -342,7 +342,7 @@ def resolve_action_params(action_dict, profile):
     a contact-shaped param automatically, e.g. if telephony/SMS ever
     gets a desktop-side plugin). True cross-platform coverage needs
     an equivalent lookup on each mobile platform, reading its own
-    local contacts/nickname data — a per-platform resolution, by
+    local contacts/nickname data, a per-platform resolution, by
     design, not a bug: a phone's contact list already lives on the
     phone.
     """
@@ -391,7 +391,7 @@ def detect_profile_switch_request(user_text):
     e.g. "Computer, switch to Landon's profile" or "switch profile to
     guest".
 
-    This is deliberately a plain regex match (no AI round-trip) —
+    This is deliberately a plain regex match (no AI round-trip),
     same rationale as core/routines.py's trigger matching: switching
     "who the assistant is personalizing itself for" should be
     instant, offline, and 100% predictable, not dependent on the AI
@@ -401,7 +401,7 @@ def detect_profile_switch_request(user_text):
     -------
     str or None
         The raw candidate name/phrase the user said (NOT yet matched
-        against configured profiles — pass it to
+        against configured profiles, pass it to
         switch_active_profile()), or None if `user_text` doesn't look
         like a switch request at all.
     """

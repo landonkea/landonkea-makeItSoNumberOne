@@ -1,5 +1,5 @@
 // ───────────────────────────────────────────────────────────────────
-// SpeechRecognizer.kt — converts speech to text (Android)
+// SpeechRecognizer.kt, converts speech to text (Android)
 // ───────────────────────────────────────────────────────────────────
 // This module uses Android's built-in speech recognition (the same
 // engine that powers Google's voice typing). It does NOT need an
@@ -35,7 +35,7 @@ import android.app.Activity
 import android.content.Intent
 // RecognizerIntent contains constants and extras for Android's built-in speech recognition.
 import android.speech.RecognizerIntent
-// Dispatchers provides coroutine thread pools — Main for UI, IO for network, Default for CPU work.
+// Dispatchers provides coroutine thread pools, Main for UI, IO for network, Default for CPU work.
 import kotlinx.coroutines.Dispatchers
 // withContext lets a coroutine switch which thread pool it runs on.
 import kotlinx.coroutines.withContext
@@ -48,7 +48,7 @@ import kotlinx.coroutines.CompletableDeferred
 // by their request code so onActivityResult can find and complete them.
 import java.util.concurrent.ConcurrentHashMap
 
-// "object" creates a singleton — exactly one SpeechRecognizer instance exists for the whole app.
+// "object" creates a singleton, exactly one SpeechRecognizer instance exists for the whole app.
 // It wraps Android's speech recognition in a clean, coroutine-friendly function.
 object SpeechRecognizer {
 
@@ -64,7 +64,7 @@ object SpeechRecognizer {
     // This launches Android's built-in speech recognition and
     // waits for the result. It's a suspending function so it
     // doesn't block the UI.
-    // "suspend" means this is a coroutine — it can pause while waiting for the user to speak.
+    // "suspend" means this is a coroutine, it can pause while waiting for the user to speak.
     // It takes an Activity (the current screen) and returns the transcribed text or null on failure.
     suspend fun recognize(activity: Activity): String? {
         // withContext(Dispatchers.Main) switches to the main (UI) thread because
@@ -112,13 +112,13 @@ object SpeechRecognizer {
             }
             // End of try-catch block.
         }
-        // End of withContext(Dispatchers.Main) — execution continues on the original thread.
+        // End of withContext(Dispatchers.Main), execution continues on the original thread.
     }
     // End of recognize() function.
 
     // ── Build the speech recognition Intent ──────────────────────
     // This function's ONLY job is to construct and configure the Intent that requests speech
-    // recognition from Android — it does not start anything or wait for a result, which keeps
+    // recognition from Android, it does not start anything or wait for a result, which keeps
     // it separate from the coroutine-bridging logic in recognize() above.
     private fun buildSpeechRecognitionIntent(): Intent {
         // Create an Intent that asks Android to start its built-in speech recognition service.

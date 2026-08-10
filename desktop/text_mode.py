@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # ───────────────────────────────────────────────────────────────────
-# text_mode.py — text-only entry point for Make It So Number One
+# text_mode.py, text-only entry point for Make It So Number One
 # ───────────────────────────────────────────────────────────────────
 # make_it_so.py's main loop needs a real microphone (pyaudio) and a
-# wake-word engine (pvporcupine) — hardware that doesn't exist inside
+# wake-word engine (pvporcupine), hardware that doesn't exist inside
 # a typical Docker container. Rather than pretend that works, this
-# module runs the SAME brain — core/routines.py's macro matching,
+# module runs the SAME brain, core/routines.py's macro matching,
 # core/ai.py's Claude/Ollama calls, and core/action_router.py's
-# action execution — driven by stdin/stdout text instead of a mic and
+# action execution, driven by stdin/stdout text instead of a mic and
 # speaker. Nothing here imports audio.py, stt.py, tts.py, or
 # wake_word.py, so it never touches pyaudio/pvporcupine at all.
 #
@@ -36,7 +36,7 @@ import os
 import sys
 
 # make_it_so.py already has robust, tested config loading + schema
-# validation + history persistence — reuse it instead of duplicating
+# validation + history persistence, reuse it instead of duplicating
 # it here. Importing make_it_so does NOT start its voice loop (that
 # only runs under `if __name__ == "__main__"`), so this is safe.
 import make_it_so
@@ -55,8 +55,8 @@ def main():
     config = make_it_so.load_config()
 
     print("=" * 60)
-    print("  Make It So Number One — TEXT MODE")
-    print("  (no microphone/speaker — type a message and press Enter)")
+    print("  Make It So Number One, TEXT MODE")
+    print("  (no microphone/speaker, type a message and press Enter)")
     print("  Type 'exit' or 'quit' to stop.")
     print("=" * 60)
 
@@ -105,7 +105,7 @@ def run_one_text_cycle(user_text, config, conversation_history, routines):
         matched_routine = routines_module.match_routine(user_text, routines)
 
     if matched_routine is not None:
-        print(f"[text_mode] Matched routine — running "
+        print(f"[text_mode] Matched routine, running "
               f"{len(matched_routine['actions'])} canned action(s), "
               f"no AI call.")
         spoken_text = matched_routine.get("response", "")
@@ -151,7 +151,7 @@ def _record_exchange(conversation_history, user_text, spoken_text):
 
 def _handle_action_results(action_results, conversation_history):
     """Print every action result and record it in history, same idea
-    as make_it_so.py's _handle_action_results — except everything
+    as make_it_so.py's _handle_action_results, except everything
     just prints (there's no speaker to hold back for), not just
     CONFIRMATION REQUIRED messages."""
     if not action_results:

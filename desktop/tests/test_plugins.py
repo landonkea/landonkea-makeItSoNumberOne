@@ -1,12 +1,12 @@
 # ───────────────────────────────────────────────────────────────────
-# tests/test_plugins.py — tests for the plugin system
+# tests/test_plugins.py, tests for the plugin system
 # ───────────────────────────────────────────────────────────────────
 # WHY THESE TESTS EXIST
 # ----------------------
 # core/plugin_loader.py replaced action_router.py's hardcoded if/elif
 # chain with a discovery mechanism that loads arbitrary third-party
 # Python files from desktop/plugins/. That's real attack surface for
-# "the assistant won't even start" bugs — a plugin author's typo
+# "the assistant won't even start" bugs, a plugin author's typo
 # shouldn't be able to take the whole app down, exactly like a
 # malformed routines.yaml can't (see test_routines.py and core/
 # routines.py's load_routines()). These tests cover:
@@ -89,7 +89,7 @@ _MISSING_EXECUTE_SOURCE = """
 
     class NoExecutePlugin(ActionPlugin):
         action_name = "no_execute"
-        # Deliberately doesn't override execute() — ActionPlugin.execute
+        # Deliberately doesn't override execute(), ActionPlugin.execute
         # is an abstractmethod, so this class can't even be
         # instantiated.
 """
@@ -129,7 +129,7 @@ class DiscoverPluginsTests(unittest.TestCase):
 
     def test_missing_execute_is_skipped_gracefully(self):
         # ActionPlugin.execute is an @abstractmethod, so a subclass
-        # that never implements it can't be instantiated — this
+        # that never implements it can't be instantiated, this
         # exercises that TypeError being caught, not crashing
         # discovery.
         with _TempPluginDir({"no_execute.py": _MISSING_EXECUTE_SOURCE}) as plugins_dir:
@@ -188,7 +188,7 @@ class BuildRegistryTests(unittest.TestCase):
             self.assertIsInstance(registry[name], ActionPlugin)
 
     def test_third_party_plugin_cannot_override_a_builtin_action_name(self):
-        # "open_app" is a real built-in action name — a third-party
+        # "open_app" is a real built-in action name, a third-party
         # plugin claiming it must be rejected, not silently swap out
         # the built-in implementation.
         hostile_source = """
@@ -202,7 +202,7 @@ class BuildRegistryTests(unittest.TestCase):
         """
         with _TempPluginDir({"hostile.py": hostile_source}) as plugins_dir:
             registry = build_registry(BUILTIN_PLUGINS, plugins_dir)
-        # The built-in plugin instance is still the one registered —
+        # The built-in plugin instance is still the one registered,
         # not the hostile third-party one.
         self.assertIn(registry["open_app"], BUILTIN_PLUGINS)
 
@@ -215,7 +215,7 @@ class BuildRegistryTests(unittest.TestCase):
 
 class ActionRouterPluginDispatchTests(unittest.TestCase):
     """execute_action()/execute_actions() dispatching through a
-    plugin-backed registry — both a custom third-party plugin and a
+    plugin-backed registry, both a custom third-party plugin and a
     migrated built-in going through the exact same code path."""
 
     def test_dispatches_to_a_discovered_third_party_plugin(self):
@@ -292,8 +292,8 @@ class MigratedBuiltinStillWorksTests(unittest.TestCase):
         fake = self._FakeRequests([geocode_response, forecast_response])
         integrations._import_requests = lambda: fake
 
-        # Goes through action_router's real, module-level REGISTRY —
-        # the exact same registry make_it_so.py/text_mode.py use —
+        # Goes through action_router's real, module-level REGISTRY,
+        # the exact same registry make_it_so.py/text_mode.py use,
         # not a hand-built test-only registry, so this proves the
         # migrated get_weather plugin is actually wired up for real.
         result = action_router.execute_action(

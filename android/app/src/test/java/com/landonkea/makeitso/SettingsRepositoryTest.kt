@@ -1,11 +1,11 @@
 // ───────────────────────────────────────────────────────────────────
-// SettingsRepositoryTest.kt — JVM unit tests for the fallback logic
+// SettingsRepositoryTest.kt, JVM unit tests for the fallback logic
 // ───────────────────────────────────────────────────────────────────
 // EncryptedSharedPreferences itself needs the Android Keystore, which
 // only exists on a real device/emulator, so it can't be exercised from
 // a plain JVM unit test. What CAN be tested without any Android
 // dependency is the "prefer the user's saved value, otherwise fall
-// back to the BuildConfig default" decision — pulled out into
+// back to the BuildConfig default" decision, pulled out into
 // SettingsRepository.resolveKey() specifically so it's testable here.
 // ───────────────────────────────────────────────────────────────────
 
@@ -50,7 +50,7 @@ class SettingsRepositoryTest {
 
     @Test
     fun `does not trim or otherwise alter a valid stored value`() {
-        // resolveKey itself should not mutate the value — trimming happens at write time in
+        // resolveKey itself should not mutate the value, trimming happens at write time in
         // setAnthropicApiKey()/setPicovoiceAccessKey(), not at read time here.
         assertEquals(
             " key-with-surrounding-space ",

@@ -1,6 +1,6 @@
 // ─── SpeechManager.swift ─────────────────────────────────────────────
 // This file handles converting the user's spoken words into text (speech
-// recognition). It uses SFSpeechRecognizer — Apple's built-in speech
+// recognition). It uses SFSpeechRecognizer, Apple's built-in speech
 // recognition engine, the same one that powers Siri.
 //
 // HOW IT WORKS:
@@ -12,7 +12,7 @@
 // The recognition can happen on-device (offline) for basic accuracy, or
 // use Apple's servers for better results. This code supports both.
 //
-// FUTURE ENHANCEMENT — OFFLINE VOSK STT:
+// FUTURE ENHANCEMENT, OFFLINE VOSK STT:
 //   Even though Apple's speech recognizer can work offline, a dedicated
 //   offline engine like Vosk (https://alphacephei.com/vosk/) could be
 //   added as an alternative for users who want:
@@ -25,11 +25,11 @@
 //   as a fallback from) SFSpeechRecognizer.
 // ──────────────────────────────────────────────────────────────────────
 
-// Import Foundation — gives us basic Swift types and utilities like
+// Import Foundation, gives us basic Swift types and utilities like
 // String, optional handling, and async support. We need this for the
 // core language features used throughout this file.
 import Foundation
-// Import Speech — this gives us SFSpeechRecognizer and related classes
+// Import Speech, this gives us SFSpeechRecognizer and related classes
 // for converting audio into text. This is Apple's speech recognition
 // framework, separate from the audio capture framework (AVFoundation).
 // On macOS (for testing/compilation), Speech is available but
@@ -38,7 +38,7 @@ import Foundation
 #if os(iOS)
 import Speech
 #endif
-// Import AVFoundation — this gives us AVAudioEngine, which we use to
+// Import AVFoundation, this gives us AVAudioEngine, which we use to
 // capture audio from the microphone and feed it to the speech recognizer.
 // AVFoundation is Apple's main framework for working with audio/video.
 import AVFoundation
@@ -67,11 +67,11 @@ class SpeechManager: NSObject {
     // that only this class can access. The `?` makes it optional because
     // not all devices support all locales.
     private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
-    // This object represents a recognition request — it buffers incoming
+    // This object represents a recognition request, it buffers incoming
     // audio and sends it to the recognizer. It's optional because we only
     // create it when recognition is active. It starts nil (no request yet).
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-    // This tracks the current recognition task — the actual in-progress
+    // This tracks the current recognition task, the actual in-progress
     // recognition operation. We need to keep a reference to it so we can
     // cancel it if needed. It's optional because there isn't always an
     // active task.
@@ -89,14 +89,14 @@ class SpeechManager: NSObject {
     // recognition failed). The `->` arrow indicates the return type.
     func recognize() async -> String? {
         // Check that the speech recognizer exists AND is available on
-        // this device. `guard let` unwraps the optional — if speechRecognizer
+        // this device. `guard let` unwraps the optional, if speechRecognizer
         // is nil or not available, we enter the else body and return nil.
         // `.isAvailable` checks if the recognizer can currently process audio
         // (it might be disabled by parental controls or other restrictions).
         guard let recognizer = speechRecognizer, recognizer.isAvailable else {
             // Print a message explaining why recognition won't work.
             print("Speech recognition not available on this device.")
-            // Return nil to indicate failure — the caller will handle it.
+            // Return nil to indicate failure, the caller will handle it.
             return nil
         }
         // Close the guard else block.
@@ -111,7 +111,7 @@ class SpeechManager: NSObject {
         guard authorized else {
             // Log the denial for debugging purposes.
             print("Speech recognition not authorized.")
-            // Return nil — without permission, we can't listen.
+            // Return nil, without permission, we can't listen.
             return nil
         }
         // Close the guard else block.
@@ -125,10 +125,10 @@ class SpeechManager: NSObject {
             // Get the shared audio session (the system-wide audio manager).
             // This controls how audio input/output behaves on the device.
             let audioSession = AVAudioSession.sharedInstance()
-            // Try to configure the audio session — this might fail if
+            // Try to configure the audio session, this might fail if
             // another app is using the microphone (like a phone call).
             do {
-                // Set the audio session category to `.record` — this tells
+                // Set the audio session category to `.record`, this tells
                 // iOS we want to capture audio (not play it). `.default`
                 // mode means standard recording settings. This is different
                 // from `.playback` which is for playing sounds out loud.
@@ -137,7 +137,7 @@ class SpeechManager: NSObject {
                 // tells iOS to let other apps know we're taking over the
                 // microphone. This ensures phone calls, music, etc. pause.
                 try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
-                // Close the do block — no errors so far.
+                // Close the do block, no errors so far.
             }
             // Catch any errors from configuring the audio session.
             catch {
@@ -160,7 +160,7 @@ class SpeechManager: NSObject {
             guard let recognitionRequest = recognitionRequest else {
                 // If for some reason the request is nil, resume with nil.
                 continuation.resume(returning: nil)
-                // Exit the function — we can't proceed without a request.
+                // Exit the function, we can't proceed without a request.
                 return
             }
             // Close the guard else block.
@@ -182,11 +182,11 @@ class SpeechManager: NSObject {
                 // Pass in the recognition request that receives audio buffers.
                 with: recognitionRequest
                 // The closure receives either a result (transcribed text) or
-                // an error. Both are optionals — one might be nil.
+                // an error. Both are optionals, one might be nil.
             ) { result, error in
                 // If we got a result (transcription), store the best version.
                 // SFSpeechRecognitionResult contains multiple possible
-                // transcriptions — `bestTranscription` is the most likely one.
+                // transcriptions, `bestTranscription` is the most likely one.
                 // `.formattedString` gives us the actual text string.
                 if let result = result {
                     // Update our finalText variable with the latest and best
@@ -202,13 +202,13 @@ class SpeechManager: NSObject {
                 // is nil, `isFinal` defaults to false, and the condition
                 // only triggers if there's an actual error.
                 if error != nil || (result?.isFinal ?? false) {
-                    // Stop the audio engine — this stops capturing mic audio.
+                    // Stop the audio engine, this stops capturing mic audio.
                     self.audioEngine.stop()
                     // Remove the "tap" (audio processing hook) from the mic
                     // input node. Bus 0 is the microphone input bus. This
                     // cleanup prevents memory leaks and frees the microphone.
                     self.audioEngine.inputNode.removeTap(onBus: 0)
-                    // Release the recognition request — it's no longer needed
+                    // Release the recognition request, it's no longer needed
                     // since recognition is done. Setting to nil helps ARC
                     // (Automatic Reference Counting) free memory.
                     self.recognitionRequest = nil
@@ -235,9 +235,9 @@ class SpeechManager: NSObject {
             // hook that receives chunks of audio data as they come in. We
             // forward these chunks to the speech recognizer.
             self.audioEngine.inputNode.installTap(
-                // Bus 0 — the main microphone input channel.
+                // Bus 0, the main microphone input channel.
                 onBus: 0,
-                // Buffer size — how much audio to capture at once. 1024
+                // Buffer size, how much audio to capture at once. 1024
                 // samples is a good balance between responsiveness and
                 // performance. Smaller = more frequent updates, larger =
                 // less CPU usage but more lag.
@@ -256,7 +256,7 @@ class SpeechManager: NSObject {
             }
             // Close the installTap function call.
 
-            // Prepare the audio engine — this pre-allocates resources and
+            // Prepare the audio engine, this pre-allocates resources and
             // gets the engine ready to start. It doesn't start capturing
             // yet; that happens when we call .start(). Preparation reduces
             // the delay ("latency") when starting.
@@ -265,7 +265,7 @@ class SpeechManager: NSObject {
             // audio from the microphone and feeding it through the tap we
             // installed above. It might fail (e.g., mic is already in use).
             do {
-                // Start the engine — audio starts flowing to the recognizer.
+                // Start the engine, audio starts flowing to the recognizer.
                 try self.audioEngine.start()
                 // Close the do block on success.
             }
@@ -279,7 +279,7 @@ class SpeechManager: NSObject {
             }
             // Close the catch block.
         }
-        // Close the withCheckedContinuation block — this is where the
+        // Close the withCheckedContinuation block, this is where the
         // function "pauses" until continuation.resume() is called above.
     }
     // Close the recognize function.

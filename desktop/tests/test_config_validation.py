@@ -1,5 +1,5 @@
 # ───────────────────────────────────────────────────────────────────
-# tests/test_config_validation.py — tests for make_it_so.py's
+# tests/test_config_validation.py, tests for make_it_so.py's
 # config.yaml schema validation and conversation history persistence
 # ───────────────────────────────────────────────────────────────────
 # WHY THESE TESTS EXIST
@@ -9,7 +9,7 @@
 # config.yaml was the problem. validate_config() now checks every
 # present key against CONFIG_SCHEMA and reports the exact dotted key
 # name and what's wrong with it. These tests exercise that schema
-# check directly (valid config, missing keys — which is fine, wrong
+# check directly (valid config, missing keys, which is fine, wrong
 # top-level type, wrong nested type, bad "mode" choice, the bool-vs-
 # int gotcha) without needing an actual config.yaml file on disk.
 #
@@ -56,7 +56,7 @@ class ValidateConfigTests(unittest.TestCase):
         self.assertEqual(make_it_so.validate_config(config), [])
 
     def test_missing_keys_are_not_errors(self):
-        # Nothing in the schema is mandatory — an empty/partial
+        # Nothing in the schema is mandatory, an empty/partial
         # config.yaml is valid, since every consumer has its own
         # sane default for an absent key.
         self.assertEqual(make_it_so.validate_config({"mode": "auto"}), [])

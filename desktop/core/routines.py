@@ -1,8 +1,8 @@
 # ───────────────────────────────────────────────────────────────────
-# routines.py — local trigger-phrase macros (no AI round-trip)
+# routines.py, local trigger-phrase macros (no AI round-trip)
 # ───────────────────────────────────────────────────────────────────
 # A "routine" maps a trigger phrase (e.g. "good morning") to a canned
-# list of actions — the exact same {"action": ..., "params": {...}}
+# list of actions, the exact same {"action": ..., "params": {...}}
 # shape Claude's JSON responses already produce, so we can hand a
 # matched routine's action list straight to action_router.
 # execute_actions() with no changes to that module at all.
@@ -10,12 +10,12 @@
 # WHY THIS EXISTS
 # ----------------
 # Some commands are the same every single time ("good morning" always
-# opens Mail and checks the weather) — paying for an AI round-trip
+# opens Mail and checks the weather), paying for an AI round-trip
 # (cost, latency, and a chance the model phrases the action slightly
 # differently each time) to run the exact same steps is wasted effort.
 # routines.yaml lets the user hard-code these as instant, offline,
 # free, deterministic macros. Anything NOT matched here still goes to
-# Claude/Ollama exactly as before — this is a fast path, not a
+# Claude/Ollama exactly as before, this is a fast path, not a
 # replacement for the AI brain.
 #
 # FILE FORMAT (routines.yaml, next to config.yaml)
@@ -28,7 +28,7 @@
 #           name: "Mail"
 #
 # See routines.example.yaml for a fuller example. The file is
-# entirely optional — no routines.yaml means no routines match, ever,
+# entirely optional, no routines.yaml means no routines match, ever,
 # and every request goes to the AI exactly like before this feature
 # existed.
 # ───────────────────────────────────────────────────────────────────
@@ -49,7 +49,7 @@ def load_routines(path=ROUTINES_FILE):
         Maps each LOWERCASED trigger phrase to
         {"response": str, "actions": list of dict}. Empty dict if the
         file doesn't exist, is empty, isn't valid YAML, or isn't
-        shaped the way we expect — a broken/missing routines.yaml
+        shaped the way we expect, a broken/missing routines.yaml
         should never prevent the assistant from starting or from
         handling normal (non-routine) requests.
     """
@@ -67,7 +67,7 @@ def load_routines(path=ROUTINES_FILE):
     if not isinstance(data, dict):
         if data is not None:
             print(f"  [routines] {path} should be a mapping of trigger "
-                  f"phrase -> routine — ignoring it.")
+                  f"phrase -> routine, ignoring it.")
         return {}
 
     routines = {}
@@ -91,13 +91,13 @@ def _parse_one_routine(trigger, body):
     -------
     dict or None
         {"response": str, "actions": list of dict}, or None if `body`
-        isn't shaped like a usable routine (logged, not raised — one
+        isn't shaped like a usable routine (logged, not raised, one
         malformed routine shouldn't take down every other routine or
         crash startup).
     """
     if not isinstance(body, dict):
         print(f"  [routines] Routine \"{trigger}\" is malformed "
-              f"(expected a mapping) — skipping it.")
+              f"(expected a mapping), skipping it.")
         return None
 
     response = body.get("response", "")
@@ -107,7 +107,7 @@ def _parse_one_routine(trigger, body):
     raw_actions = body.get("actions", [])
     if not isinstance(raw_actions, list):
         print(f"  [routines] Routine \"{trigger}\" has a non-list "
-              f"\"actions\" — treating it as having none.")
+              f"\"actions\", treating it as having none.")
         raw_actions = []
 
     actions = []
@@ -128,7 +128,7 @@ def _parse_one_routine(trigger, body):
 def _normalize(text):
     """
     Lowercase and strip everything except letters/digits/spaces, and
-    collapse repeated whitespace — so "Good Morning!" and "good
+    collapse repeated whitespace, so "Good Morning!" and "good
     morning" (or "good   morning") both compare equal.
     """
     text = text.lower()
@@ -141,11 +141,11 @@ def match_routine(user_text, routines):
     Check whether `user_text` invokes one of the loaded `routines`.
 
     A routine matches when its trigger phrase appears as a WHOLE-WORD
-    substring of the (normalized) user text — e.g. trigger "good
+    substring of the (normalized) user text, e.g. trigger "good
     morning" matches "computer, good morning" and "good morning
     computer" but NOT "goodness morning" (no partial-word matches).
     This is deliberately simple (no fuzzy matching, no AI involved) so
-    routine behavior is 100% predictable — the whole point of a
+    routine behavior is 100% predictable, the whole point of a
     routine is that it does the SAME thing every time, unlike Claude's
     responses which can vary.
 
@@ -158,7 +158,7 @@ def match_routine(user_text, routines):
     user_text : str
         The transcribed thing the user said.
     routines : dict
-        Loaded from load_routines() — {trigger_phrase: routine_dict}.
+        Loaded from load_routines(), {trigger_phrase: routine_dict}.
 
     RETURNS
     -------

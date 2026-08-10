@@ -11,7 +11,7 @@ let package = Package(
         .executable(name: "MakeItSo", targets: ["MakeItSo"])
     ],
     dependencies: [
-        // Porcupine wake word engine (Picovoice) — detects the word
+        // Porcupine wake word engine (Picovoice), detects the word
         // "Computer" hands-free without needing to tap a button.
         // This is the iOS SPM package. macOS is not supported by
         // this package, but we gate it with #if os(iOS) in our code.

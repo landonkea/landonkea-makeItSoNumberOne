@@ -1,18 +1,18 @@
 # ───────────────────────────────────────────────────────────────────
-# actions/integrations.py — real weather, calendar & reminders
+# actions/integrations.py, real weather, calendar & reminders
 # ───────────────────────────────────────────────────────────────────
 # This is the LARGE-tier follow-up to the "add a weather/calendar/
 # reminders action module" idea that earlier passes flagged as
 # MEDIUM-but-deferred because it needed real API keys and credential
 # handling. This module does the real thing:
 #
-#   - WEATHER:   two providers — Open-Meteo (free, no API key, the
+#   - WEATHER:   two providers, Open-Meteo (free, no API key, the
 #                default) and OpenWeatherMap (needs an API key, for
 #                users who already have one / want its data).
 #   - CALENDAR:  any standard .ics feed URL (Google/iCloud/Outlook/
 #                Nextcloud all publish these for "secret address"
 #                calendar sharing), with optional HTTP basic auth for
-#                private feeds. No third-party SDK — a small RFC 5545
+#                private feeds. No third-party SDK, a small RFC 5545
 #                parser lives right here (see parse_ics_events below)
 #                so we don't add a dependency for a handful of fields.
 #   - REMINDERS: Todoist's REST API (add / list / complete a task),
@@ -24,7 +24,7 @@
 # --------------------
 # All of this reads from a new `integrations:` section of
 # config.yaml (see config.example.yaml). Nothing here ever raises on
-# a missing credential — every function checks what it needs up
+# a missing credential, every function checks what it needs up
 # front and returns a clear, actionable error string (e.g. "Set
 # integrations.reminders.todoist_api_token in config.yaml") instead
 # of crashing or leaking a stack trace back through the assistant.
@@ -38,7 +38,7 @@
 # have no equivalent addendum mechanism, so extending them to know
 # about get_weather/get_calendar_events/etc. would mean hand-updating
 # two more parsers (Kotlin + Swift) and their system prompts in
-# lockstep — a separate, mobile-scoped pass, not part of this one.
+# lockstep, a separate, mobile-scoped pass, not part of this one.
 # ───────────────────────────────────────────────────────────────────
 
 from datetime import datetime, timedelta, timezone
@@ -94,7 +94,7 @@ def _get_integrations_config(config):
 
 def _import_requests():
     """Import `requests` lazily so a missing install produces a
-    friendly error message instead of crashing the app at startup —
+    friendly error message instead of crashing the app at startup,
     same reasoning as web_actions.search_web()."""
     import requests
     return requests
@@ -204,7 +204,7 @@ def _get_weather_openweathermap(requests, location, api_key):
     )
     if resp.status_code == 401:
         return (
-            "OpenWeatherMap rejected the API key (HTTP 401) — check "
+            "OpenWeatherMap rejected the API key (HTTP 401), check "
             "integrations.weather.openweathermap_api_key"
         )
     if resp.status_code != 200:
@@ -359,7 +359,7 @@ def parse_ics_events(ics_text):
     """
     Parse the VEVENT blocks out of raw .ics text.
 
-    This is a deliberately minimal RFC 5545 parser — just enough to
+    This is a deliberately minimal RFC 5545 parser, just enough to
     read SUMMARY/LOCATION/DTSTART/DTEND out of real calendar exports
     (Google, iCloud, Outlook, Nextcloud all use this shape) without
     pulling in a third-party icalendar dependency for five fields.
@@ -387,7 +387,7 @@ def parse_ics_events(ics_text):
 
 def _as_naive(dt):
     """Strip tzinfo (after any conversion the caller already did) so
-    we can compare aware and naive datetimes uniformly — this module
+    we can compare aware and naive datetimes uniformly, this module
     only ever compares within a single feed's own "now", never across
     timezone-sensitive boundaries, so naive comparison is sufficient."""
     return dt.replace(tzinfo=None) if getattr(dt, "tzinfo", None) else dt
@@ -472,7 +472,7 @@ def add_reminder(text, config):
         )
         if resp.status_code == 401:
             return (
-                "Todoist rejected the API token (HTTP 401) — check "
+                "Todoist rejected the API token (HTTP 401), check "
                 "integrations.reminders.todoist_api_token"
             )
         if resp.status_code not in (200, 204):
@@ -557,7 +557,7 @@ def _fetch_open_todoist_tasks(requests, token):
     )
     if resp.status_code == 401:
         return (
-            "Todoist rejected the API token (HTTP 401) — check "
+            "Todoist rejected the API token (HTTP 401), check "
             "integrations.reminders.todoist_api_token"
         )
     if resp.status_code != 200:

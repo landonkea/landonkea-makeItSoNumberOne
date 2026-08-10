@@ -1,8 +1,8 @@
-# ── stt.py — Speech-to-Text (Online via Whisper + Offline via Vosk) ──
+# ── stt.py, Speech-to-Text (Online via Whisper + Offline via Vosk) ──
 # This module converts recorded audio into text.
 # TWO modes:
-#   ONLINE:  OpenAI Whisper API — more accurate, needs internet, costs pennies
-#   OFFLINE: Vosk (local) — free, needs a 50MB model download
+#   ONLINE:  OpenAI Whisper API, more accurate, needs internet, costs pennies
+#   OFFLINE: Vosk (local), free, needs a 50MB model download
 # The `transcribe()` function tries online first. If it fails (no
 # internet, no API key), it automatically falls back to offline.
 
@@ -13,12 +13,12 @@ import io
 import json
 
 
-# ── transcribe() — THE MAIN FUNCTION you call from make_it_so.py ──
+# ── transcribe(), THE MAIN FUNCTION you call from make_it_so.py ──
 # It tries online first, then falls back to offline if that fails.
 # `audio_data` is raw bytes from the microphone (16-bit, 22050 Hz, mono).
 # `config` is a dict loaded from config.yaml that may contain API keys.
 def transcribe(audio_data, config):
-    # Check the mode setting in config. Default is "auto" — try
+    # Check the mode setting in config. Default is "auto", try
     # online first, if it fails, fall back to offline.
     mode = config.get("mode", "auto")
     # Get the Whisper API key from config (might be empty if not set).
@@ -33,14 +33,14 @@ def transcribe(audio_data, config):
         if result is not None:
             return result
         # If online failed and mode is "online" only (not "auto"),
-        # stop here — don't try offline.
+        # stop here, don't try offline.
         if mode == "online":
             print("  [stt] Online mode failed and mode is set to 'online'.")
             print("  [stt] No fallback attempted.")
             return None
-        # If we get here, mode is "auto" — online failed, so we'll
+        # If we get here, mode is "auto", online failed, so we'll
         # fall through to offline below.
-        print("  [stt] Online transcription failed — falling back to offline.")
+        print("  [stt] Online transcription failed, falling back to offline.")
 
     # ── Offline mode (Vosk) ─────────────────────────────────────
     # If mode is "offline" or auto-fallback from above.
@@ -50,7 +50,7 @@ def transcribe(audio_data, config):
     return result
 
 
-# ── transcribe_online() — Uses OpenAI Whisper API ────────────────
+# ── transcribe_online(), Uses OpenAI Whisper API ────────────────
 # This is the same as the original transcribe() function. It sends
 # audio to the cloud and gets back text. Requires an internet
 # connection and a valid OpenAI API key.
@@ -61,11 +61,11 @@ def transcribe_online(audio_data, config):
         return None
 
     print("  [stt] Preparing audio for online transcription...")
-    # `audio_data` is just raw PCM samples — plain numbers with no
+    # `audio_data` is just raw PCM samples, plain numbers with no
     # header describing the format. The Whisper API needs a proper
     # .wav FILE (samples plus a header stating channel count, sample
     # rate, etc.), so we wrap the raw bytes in a WAV container here.
-    # `io.BytesIO()` is an in-memory "file" — it behaves like a real
+    # `io.BytesIO()` is an in-memory "file", it behaves like a real
     # file object (we can write to it, read it back) but lives
     # entirely in RAM, so we never have to touch the disk just to
     # reshape this data before uploading it.
@@ -86,8 +86,8 @@ def transcribe_online(audio_data, config):
             "https://api.openai.com/v1/audio/transcriptions",
             headers={"Authorization": f"Bearer {api_key}"},
             # `files=` tells `requests` to send this as a
-            # "multipart/form-data" upload — the same encoding a web
-            # browser uses when you pick a file in an upload form —
+            # "multipart/form-data" upload, the same encoding a web
+            # browser uses when you pick a file in an upload form,
             # rather than as a plain JSON body. The tuple gives the
             # fake filename, the file's bytes, and its MIME type.
             files={"file": ("recording.wav", wav_bytes, "audio/wav")},
@@ -108,7 +108,7 @@ def transcribe_online(audio_data, config):
         return None
 
 
-# ── transcribe_offline() — Uses Vosk (runs 100% locally) ────────
+# ── transcribe_offline(), Uses Vosk (runs 100% locally) ────────
 # Vosk is an offline speech recognition engine. It uses a small
 # AI model (~50MB) that runs entirely on your computer.
 # No internet needed, no API key needed, no costs ever.
@@ -159,9 +159,9 @@ def transcribe_offline(audio_data, config):
     print(f"  [stt] Loading Vosk model from {model_path}...")
     try:
         # Load the Vosk model (this reads the AI model from disk
-        # into memory — takes 2-5 seconds the first time).
+        # into memory, takes 2-5 seconds the first time).
         model = vosk.Model(model_path)
-        # Create a "recognizer" — the object that actually turns
+        # Create a "recognizer", the object that actually turns
         # incoming audio into text, using the loaded model. `16000`
         # tells it to expect 16,000 audio samples per second (Vosk's
         # required rate), which is why we resample below.
@@ -205,7 +205,7 @@ def _resample_22050_to_16000(audio_data):
     ----------
     audio_data : bytes
         Raw audio recorded at 22050 samples/second (our mic's
-        recording rate — see audio.py's SAMPLE_RATE constant).
+        recording rate, see audio.py's SAMPLE_RATE constant).
 
     RETURNS
     -------
@@ -216,7 +216,7 @@ def _resample_22050_to_16000(audio_data):
     HOW IT WORKS
     ------------
     "Sample rate" is how many audio measurements are taken per
-    second — a higher rate captures more detail but produces more
+    second, a higher rate captures more detail but produces more
     data. Vosk was trained on 16kHz audio and expects input at
     exactly that rate; our microphone records at 22050 Hz instead,
     so we have to convert (downsample) before handing audio to Vosk.
@@ -228,12 +228,12 @@ def _resample_22050_to_16000(audio_data):
     much cruder than a "real" audio resampling algorithm (which
     would smooth between samples to avoid introducing distortion),
     but it's simple, fast, and accurate enough for recognizing
-    spoken commands — perfect audio fidelity doesn't matter here,
+    spoken commands, perfect audio fidelity doesn't matter here,
     only whether Vosk can make out the words.
     """
     # `struct.unpack_from` converts the raw bytes into a tuple of
     # individual numbers. "<h" means "little-endian signed 16-bit
-    # integer" — the same format our audio was recorded in — and we
+    # integer", the same format our audio was recorded in, and we
     # multiply "h" by the sample count to unpack that many values at
     # once. `len(audio_data) // 2` is the sample count because each
     # 16-bit sample takes up 2 bytes.
@@ -243,7 +243,7 @@ def _resample_22050_to_16000(audio_data):
 
     # Walk through the original samples in increasing steps, keeping
     # only the sample nearest each step. `step` is how far to advance
-    # the "read position" for every ONE output sample we keep — a
+    # the "read position" for every ONE output sample we keep, a
     # step of ~1.378 means we output roughly 16000 samples for every
     # 22050 input samples, matching the target rate.
     resampled = []

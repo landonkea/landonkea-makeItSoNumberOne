@@ -1,12 +1,12 @@
 # ───────────────────────────────────────────────────────────────────
-# tests/test_ai_parsing.py — tests for core/ai.py's response parser
+# tests/test_ai_parsing.py, tests for core/ai.py's response parser
 # ───────────────────────────────────────────────────────────────────
 # WHY THESE TESTS EXIST
 # ----------------------
 # core/ai.py's _parse_response() used to rely on a hand-rolled regex
 # to split the AI's "RESPONSE: ... ACTIONS: ..." text reply into
 # spoken text + a list of actions. That parser had a real bug (the
-# first action in a list could be silently dropped — see git
+# first action in a list could be silently dropped, see git
 # history). This pass switches the desktop client to ask the model
 # for strict JSON instead and parse it with json.loads(), which
 # structurally can't have a "first item is different from the rest"
@@ -90,7 +90,7 @@ class ParseResponseJsonTests(unittest.TestCase):
 
     def test_non_dict_json_falls_back_to_legacy(self):
         # A bare JSON array/string is technically valid JSON, but not
-        # the {"response", "actions"} object shape we asked for — it
+        # the {"response", "actions"} object shape we asked for, it
         # should fall through to the legacy parser (which will just
         # treat the whole thing as ordinary text with no actions,
         # since it has no RESPONSE:/ACTIONS: markers either).

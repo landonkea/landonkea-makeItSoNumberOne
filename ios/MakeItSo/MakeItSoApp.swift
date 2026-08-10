@@ -1,7 +1,7 @@
 // ───────────────────────────────────────────────────────────────────
-// MakeItSoApp.swift — the app's entry point (iOS)
+// MakeItSoApp.swift, the app's entry point (iOS)
 // ───────────────────────────────────────────────────────────────────
-// This is the SwiftUI @main entry point — it's called when the app
+// This is the SwiftUI @main entry point, it's called when the app
 // launches. It sets up the ContentView and wires everything
 // together. This is the iOS equivalent of Android's MainActivity.
 //

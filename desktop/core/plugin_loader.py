@@ -1,23 +1,23 @@
 # ───────────────────────────────────────────────────────────────────
-# plugin_loader.py — discovers third-party ActionPlugin subclasses
+# plugin_loader.py, discovers third-party ActionPlugin subclasses
 # ───────────────────────────────────────────────────────────────────
 # Scans a directory (by default desktop/plugins/) for *.py files and
 # loads any ActionPlugin subclass it finds into a registry action_
 # router.py can dispatch through, exactly like the built-in plugins
 # in plugins_builtin.py.
 #
-# "NEVER BLOCK STARTUP" — SAME PHILOSOPHY AS routines.py
+# "NEVER BLOCK STARTUP", SAME PHILOSOPHY AS routines.py
 # ---------------------------------------------------------
 # routines.py's load_routines() treats a missing/malformed
 # routines.yaml as "load nothing, log it, keep going" rather than
-# raising — a personal macro file someone hand-edited shouldn't be
+# raising, a personal macro file someone hand-edited shouldn't be
 # able to crash the whole assistant on startup. Third-party plugins
 # are the same kind of user-supplied, not-necessarily-well-formed
 # input, just as Python files instead of YAML: a plugin file that
 # fails to import, defines a class with a blank action_name, doesn't
 # implement execute() (so it can't even be instantiated, since
 # ActionPlugin.execute is an abstractmethod), or collides with an
-# already-registered action name is logged and SKIPPED — never
+# already-registered action name is logged and SKIPPED, never
 # raised. One broken plugin can't take down the other plugins, let
 # alone the app.
 # ───────────────────────────────────────────────────────────────────
@@ -31,7 +31,7 @@ from .plugin_base import ActionPlugin
 
 def _load_module_from_path(path):
     """Import the .py file at `path` as its own module, independent
-    of any package layout — this is what lets desktop/plugins/ hold
+    of any package layout, this is what lets desktop/plugins/ hold
     arbitrary user files without them needing to be a proper Python
     package."""
     module_name = "_makeitso_plugin__" + os.path.splitext(os.path.basename(path))[0]
@@ -45,7 +45,7 @@ def _load_module_from_path(path):
 
 def _plugin_classes_defined_in(module):
     """Return every ActionPlugin subclass DEFINED in `module` itself
-    (not merely imported into it — e.g. `from core.plugin_base import
+    (not merely imported into it, e.g. `from core.plugin_base import
     ActionPlugin` shouldn't cause ActionPlugin to be picked up as a
     plugin, and a plugin file that imports another plugin file's class
     for reuse shouldn't double-register it)."""
@@ -63,14 +63,14 @@ def _plugin_classes_defined_in(module):
 
 def _try_register(plugin_class, filename, taken_names, out):
     """Instantiate and validate one plugin class, adding it to `out`
-    on success. Any failure along the way is logged and swallowed —
+    on success. Any failure along the way is logged and swallowed,
     see the module docstring above for why."""
     try:
         instance = plugin_class()
     except Exception as e:
         # Most commonly TypeError: Python refuses to instantiate an
         # ABC subclass that never overrode the abstractmethod
-        # execute() — that's exactly the "malformed plugin" case this
+        # execute(), that's exactly the "malformed plugin" case this
         # function needs to survive.
         print(f"  [plugins] Skipping {plugin_class.__name__} in {filename}: "
               f"could not instantiate it ({type(e).__name__}: {e})")
@@ -104,7 +104,7 @@ def discover_plugins(plugins_dir, existing_action_names=None):
     """
     Scan `plugins_dir` for third-party ActionPlugin subclasses.
 
-    Only *.py files directly inside `plugins_dir` are scanned — NOT
+    Only *.py files directly inside `plugins_dir` are scanned, NOT
     subdirectories. That's deliberate: desktop/plugins/examples/
     ships a documented template plugin that should be copied up into
     desktop/plugins/ to activate it, not auto-loaded from where it
@@ -114,7 +114,7 @@ def discover_plugins(plugins_dir, existing_action_names=None):
     PARAMETERS
     ----------
     plugins_dir : str
-        Directory to scan. A missing directory is not an error — it
+        Directory to scan. A missing directory is not an error, it
         just means no third-party plugins are installed.
     existing_action_names : iterable of str, optional
         Action names already claimed (by built-in plugins). A
@@ -194,7 +194,7 @@ def build_registry(builtin_plugins, plugins_dir):
         action_name = (plugin.action_name or "").strip()
         if not action_name:
             # A built-in with a blank action_name is a programmer
-            # error in THIS codebase, not user input — fail loudly
+            # error in THIS codebase, not user input, fail loudly
             # rather than silently dropping a built-in action.
             raise ValueError(
                 f"Built-in plugin {plugin.__class__.__name__} has no action_name"

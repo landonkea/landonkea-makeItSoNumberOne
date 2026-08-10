@@ -5,7 +5,7 @@
 # It's a standard convention for Python executable scripts.
 
 # ───────────────────────────────────────────────────────────────────
-# build_pyinstaller.py — builds standalone .exe/.app/.bin
+# build_pyinstaller.py, builds standalone .exe/.app/.bin
 # ───────────────────────────────────────────────────────────────────
 # This script uses PyInstaller to package the entire voice
 # assistant into a single executable file that works WITHOUT
@@ -60,7 +60,7 @@ def build():
     2. It bundles everything into one folder (or one file with
        --onefile) that contains the app + Python runtime + all
        dependencies.
-    3. The result is a portable executable — NO install needed.
+    3. The result is a portable executable, NO install needed.
     """
     # ── Get the script's directory ───────────────────────────────
     # `os.path.abspath(__file__)` gets the full absolute path to this
@@ -91,7 +91,7 @@ def _ensure_pyinstaller_installed():
     instructions and exit the script if it isn't.
 
     Exits (rather than returning False) because every remaining step
-    of build() depends on PyInstaller being present — there's no
+    of build() depends on PyInstaller being present, there's no
     useful partial build to fall back to, unlike the optional-
     dependency patterns used elsewhere in this codebase (e.g.
     Vosk/Whisper in stt.py) where a missing library just disables
@@ -100,7 +100,7 @@ def _ensure_pyinstaller_installed():
     try:
         # Attempt to import the PyInstaller module. If this succeeds,
         # we know PyInstaller is installed and available on the
-        # system. We don't need to use the module itself here — the
+        # system. We don't need to use the module itself here, the
         # import succeeding or failing is the only thing we care
         # about, since the actual build runs PyInstaller as a
         # separate command-line program via subprocess, not through
@@ -245,14 +245,14 @@ def _build_pyinstaller_command(script_dir):
         # icon file actually exists. PyInstaller errors out (and the
         # whole build fails) if you point --icon at a path that isn't
         # there, and there's currently no icon.icns checked into
-        # assets/ — so skip the flag instead of breaking the build.
+        # assets/, so skip the flag instead of breaking the build.
         icon_path = os.path.join(assets_dir, "icon.icns")
         if os.path.exists(icon_path):
             cmd.append("--icon")
             # Point to the .icns icon file in the assets directory.
             cmd.append(icon_path)
         else:
-            print(f"  [build] No icon.icns found in {assets_dir} — "
+            print(f"  [build] No icon.icns found in {assets_dir}, "
                   f"building without a custom icon.")
 
     # The main Python script to bundle into the executable.
@@ -279,7 +279,7 @@ def _run_pyinstaller(cmd):
     try:
         # Run the command using subprocess.run(). We deliberately do
         # NOT pass capture_output=True here (unlike most subprocess
-        # calls elsewhere in this codebase) — PyInstaller's build
+        # calls elsewhere in this codebase), PyInstaller's build
         # output is long and useful to watch live, so we let it print
         # straight to our terminal as it runs instead of capturing it.
         # `check=True` means Python will raise an error if the command
@@ -324,7 +324,7 @@ def _print_success_message():
     # Print a separator line.
     print("  ║                                                ║")
     # Print a note that the app is portable (no Python needed).
-    print("  ║  Share this with anyone — no Python needed!    ║")
+    print("  ║  Share this with anyone, no Python needed!    ║")
     # Print the bottom border of the success box.
     print("  ╚══════════════════════════════════════════════════╝")
     # Print a blank line at the end for clean formatting.

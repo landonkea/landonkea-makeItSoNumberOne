@@ -1,5 +1,5 @@
 # ───────────────────────────────────────────────────────────────────
-# journal_entry_plugin.py — publishes a journal entry to Soliloquy
+# journal_entry_plugin.py, publishes a journal entry to Soliloquy
 # ───────────────────────────────────────────────────────────────────
 # Lets you say "Computer, journal entry: ..." and have it saved as a
 # real entry in landonkea-soliloquy (a separate app -- see that repo's
@@ -46,7 +46,7 @@ from core.plugin_base import ActionPlugin
 class JournalEntryPlugin(ActionPlugin):
     action_name = "journal_entry"
     description = "Save a journal entry to Soliloquy over MQTT."
-    param_schema = {"text": "str — what to save, transcribed from what the user said"}
+    param_schema = {"text": "str, what to save, transcribed from what the user said"}
 
     def execute(self, params: dict, config: dict) -> str:
         text = (params.get("text") or "").strip()

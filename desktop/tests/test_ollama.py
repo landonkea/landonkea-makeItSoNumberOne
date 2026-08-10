@@ -1,5 +1,5 @@
 # ───────────────────────────────────────────────────────────────────
-# tests/test_ollama.py — tests for core/ai.py's Ollama/local-LLM
+# tests/test_ollama.py, tests for core/ai.py's Ollama/local-LLM
 # fallback: model listing, pull-if-missing, and offline degradation.
 # ───────────────────────────────────────────────────────────────────
 # WHY THESE TESTS EXIST
@@ -7,10 +7,10 @@
 # core/ai.py's offline path talks to a locally-running Ollama server
 # over HTTP. These tests cover the model-management layer added on
 # top of the original "just call /api/generate" fallback:
-#   - list_ollama_models() — GET /api/tags happy path + failure paths
-#   - is_model_available() — exact match and the ":latest" tag
+#   - list_ollama_models(), GET /api/tags happy path + failure paths
+#   - is_model_available(), exact match and the ":latest" tag
 #     equivalence Ollama itself applies
-#   - pull_model() / ensure_model_available() — triggering
+#   - pull_model() / ensure_model_available(), triggering
 #     POST /api/pull when a configured model isn't present yet
 #   - process_with_ollama()'s end-to-end degradation when Ollama
 #     isn't running at all (connection refused / unreachable), and
@@ -210,7 +210,7 @@ class EnsureModelAvailableTests(OllamaTestCase):
         result = ai.ensure_model_available("llama3.2")
 
         self.assertTrue(result)
-        # Only the /api/tags check should have happened — no pull.
+        # Only the /api/tags check should have happened, no pull.
         self.assertEqual(len(fake.calls), 1)
         self.assertEqual(fake.calls[0]["url"], "http://localhost:11434/api/tags")
 
@@ -279,7 +279,7 @@ class ProcessWithOllamaTests(OllamaTestCase):
 
     def test_configured_model_missing_no_auto_pull_still_attempts_generate(self):
         # Default behavior (ollama_auto_pull unset/false): warn, but
-        # don't block the request on a multi-minute pull — try the
+        # don't block the request on a multi-minute pull, try the
         # generate call anyway.
         self._patch_ollama_running(True)
         fake = _FakeRequests([

@@ -1,5 +1,5 @@
 # ───────────────────────────────────────────────────────────────────
-# tts.py — Text-to-Speech using system commands
+# tts.py, Text-to-Speech using system commands
 # ───────────────────────────────────────────────────────────────────
 # This module converts Claude's text responses into spoken audio.
 #
@@ -39,7 +39,7 @@ import threading
 
 # A private sentinel object used to tell SpeechQueue's worker thread
 # "there's nothing more coming, stop." A plain string like "" won't
-# do — it could collide with a legitimate (if useless) queued item —
+# do, it could collide with a legitimate (if useless) queued item,
 # so we use a unique object() whose only property that matters is
 # that it's `is`-comparable and nothing else will ever equal it.
 _STOP = object()
@@ -53,14 +53,14 @@ class SpeechQueue:
     WHY THIS EXISTS
     ----------------
     Streaming TTS hands sentences to us one at a time as soon as each
-    one is ready (see core/ai.py's streaming Claude path) — but the
+    one is ready (see core/ai.py's streaming Claude path), but the
     AI might finish generating sentence 2 before sentence 1 has
     finished being spoken. This class is the thing that guarantees:
       - sentences are always spoken in the order they were enqueued
         (never out of order, no matter how fast/slow they arrive),
       - only one sentence plays at a time (no overlapping audio),
       - and there's no gap-causing round-trip back to whatever
-        produced the text — the moment one sentence finishes, the
+        produced the text, the moment one sentence finishes, the
         next one (if already queued) starts immediately.
 
     A single background thread pulling from a queue.Queue gives us
@@ -87,7 +87,7 @@ class SpeechQueue:
             self._thread.start()
 
     def enqueue(self, text):
-        """Add a sentence to be spoken. Returns immediately — the
+        """Add a sentence to be spoken. Returns immediately, the
         actual speaking happens on the worker thread. Blank/empty
         text is silently ignored (nothing useful to speak)."""
         if not text or not text.strip():
@@ -97,7 +97,7 @@ class SpeechQueue:
 
     def wait_done(self):
         """Block until every sentence enqueued so far has finished
-        being spoken (does NOT stop the worker — more can still be
+        being spoken (does NOT stop the worker, more can still be
         enqueued afterward)."""
         self._queue.join()
 
@@ -122,7 +122,7 @@ class SpeechQueue:
                 except Exception as e:
                     # A single bad sentence (e.g. a transient TTS
                     # engine hiccup) shouldn't take down the rest of
-                    # the queue — log it and keep going.
+                    # the queue, log it and keep going.
                     print(f"  [tts] Error speaking queued sentence: {e}")
             finally:
                 self._queue.task_done()
@@ -205,7 +205,7 @@ def _speak_macos(text):
 
     The `say` command has been part of macOS since the beginning.
     It uses the built-in TTS voices. Voice "Samantha" is clear and
-    pleasant. subprocess.run() runs a command in the terminal — we
+    pleasant. subprocess.run() runs a command in the terminal, we
     pass a list: ["say", "-v", "Samantha", text]. This is equivalent
     to typing in Terminal:
         say -v Samantha "Hello world"
@@ -235,7 +235,7 @@ def _speak_linux(text):
     # If "espeak" is not installed, Python raises FileNotFoundError
     # (the executable wasn't found on the system's PATH).
     except FileNotFoundError:
-        # espeak not installed — try speech-dispatcher's "spd-say"
+        # espeak not installed, try speech-dispatcher's "spd-say"
         # command as a fallback.
         try:
             subprocess.run(
@@ -263,7 +263,7 @@ def _speak_windows(text):
     3. Calls .Speak() with the text.
 
     NOTE: PowerShell's escape character is the backtick (`), not a
-    backslash — inside a double-quoted string, a literal " must
+    backslash, inside a double-quoted string, a literal " must
     become `" (or ""). Using a backslash here (as you would in
     Python or C) does NOT escape anything in PowerShell, so a
     spoken response containing a quote character would have broken

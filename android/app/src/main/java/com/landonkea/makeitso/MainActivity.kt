@@ -1,5 +1,5 @@
 // ───────────────────────────────────────────────────────────────────
-// MainActivity.kt — the app's main screen (Android)
+// MainActivity.kt, the app's main screen (Android)
 // ───────────────────────────────────────────────────────────────────
 // This is the first screen that shows when the user opens the app.
 // It shows:
@@ -67,7 +67,7 @@ import org.json.JSONObject
 // File lets us read/write conversationHistory.json in the app's private storage directory.
 import java.io.File
 
-// MainActivity is the entry point of the app — it's the screen that appears when the app launches.
+// MainActivity is the entry point of the app, it's the screen that appears when the app launches.
 // ComponentActivity is the standard base for Android activities using Jetpack Compose.
 class MainActivity : ComponentActivity() {
 
@@ -101,7 +101,7 @@ class MainActivity : ComponentActivity() {
     // first one is still mid-flight. Both copies would then fight over the same microphone
     // (wakeWordDetector and SpeechRecognizer both talk to the single physical mic), and worse,
     // SpeechRecognizer always uses the same hardcoded requestCode (2000) for every recognition
-    // request — so the second cycle would silently overwrite the first cycle's pending listener
+    // request, so the second cycle would silently overwrite the first cycle's pending listener
     // in that map, leaving the first cycle's coroutine suspended forever waiting for a result
     // that will never arrive (a permanent "leak" of that coroutine). Tracking the Job lets us
     // simply ignore a new tap while a cycle is already running, which avoids all of that.
@@ -116,7 +116,7 @@ class MainActivity : ComponentActivity() {
     private var conversationHistory: MutableList<ConversationTurn> = mutableListOf()
 
     // ── Conversation history file ────────────────────────────────
-    // Lives in the app's private files directory (filesDir) — not accessible to other apps,
+    // Lives in the app's private files directory (filesDir), not accessible to other apps,
     // and automatically cleared if the user uninstalls the app. Computed lazily since filesDir
     // isn't available until the Activity/Context exists.
     private val historyFile: File by lazy {
@@ -133,7 +133,7 @@ class MainActivity : ComponentActivity() {
     private val assistantMode = "auto"
 
     // ── Max conversation history length ──────────────────────────
-    // Matches desktop's default (see desktop/config.example.yaml's settings.max_history: 20) —
+    // Matches desktop's default (see desktop/config.example.yaml's settings.max_history: 20),
     // 20 entries = 10 user + 10 assistant turns. Kept as a simple constant here since Android
     // has no equivalent settings file yet (see conversationHistory above).
     private val maxHistoryTurns = 20
@@ -144,7 +144,7 @@ class MainActivity : ComponentActivity() {
     // SettingsRepository.kt), then finally falls back to BuildConfig
     // (set in app/build.gradle.kts -> PICOVOICE_ACCESS_KEY) if the user
     // hasn't entered their own. Resolved once and cached, same as
-    // wakeWordDetector below — changing the key in Settings takes
+    // wakeWordDetector below, changing the key in Settings takes
     // effect the next time the app is restarted (wakeWordDetector's own
     // lazy initialization means this is only actually read the first
     // time the user triggers wake-word detection in a given app run).
@@ -165,7 +165,7 @@ class MainActivity : ComponentActivity() {
     private val wakeWordDetectorLazy: Lazy<WakeWordDetector> = lazy {
         WakeWordDetector(this, picovoiceAccessKey)
     }
-    // "by wakeWordDetectorLazy" delegates reads of wakeWordDetector to the Lazy object above —
+    // "by wakeWordDetectorLazy" delegates reads of wakeWordDetector to the Lazy object above,
     // the first read runs the initializer block and caches the result; every later read just
     // returns the cached WakeWordDetector instance.
     private val wakeWordDetector: WakeWordDetector by wakeWordDetectorLazy
@@ -173,7 +173,7 @@ class MainActivity : ComponentActivity() {
     // ── Activity lifecycle ──────────────────────────────────────
     // onCreate() is called when Android first creates the activity (the app starts or resumes).
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Always call the parent class's onCreate first — it sets up the activity framework.
+        // Always call the parent class's onCreate first, it sets up the activity framework.
         super.onCreate(savedInstanceState)
 
         // Request microphone permission from the user (required on Android 6.0+ for audio recording).
@@ -194,7 +194,7 @@ class MainActivity : ComponentActivity() {
             // If TTS failed to initialize, tts will remain null and we just won't have speech output.
         }
 
-        // Set up the Compose UI — this tells Android that the UI is defined by Compose functions.
+        // Set up the Compose UI, this tells Android that the UI is defined by Compose functions.
         setContent {
             // Apply the app's custom color theme to everything inside.
             MakeItSoTheme {
@@ -220,7 +220,7 @@ class MainActivity : ComponentActivity() {
 
     // Called when the activity is being destroyed (user presses back, system kills app, etc.).
     override fun onDestroy() {
-        // Cancel ALL coroutines running under scope — stops background work cleanly.
+        // Cancel ALL coroutines running under scope, stops background work cleanly.
         scope.cancel()
         // Stop any TTS speech that is currently playing.
         tts?.stop()
@@ -230,7 +230,7 @@ class MainActivity : ComponentActivity() {
         // the object isn't actually built until the FIRST time something reads it. If the user
         // closes the app without ever tapping "Say 'Computer'" (so wakeWordDetector.detect()
         // was never called), then simply writing "wakeWordDetector.destroy()" here would itself
-        // trigger that first read — creating a brand-new Porcupine engine (loading its native
+        // trigger that first read, creating a brand-new Porcupine engine (loading its native
         // model files) for the sole purpose of immediately destroying it again. That's wasted
         // work during shutdown. isInitialized() on the Lazy object lets us check whether it was
         // already built WITHOUT triggering creation, so we only clean up what actually exists.
@@ -281,7 +281,7 @@ class MainActivity : ComponentActivity() {
     // "suspend" means this function can be paused without blocking the thread.
     // This function's ONLY job is to run the six steps of one assistant interaction IN ORDER
     // and stop early if any step fails. Each step's actual work lives in its own small,
-    // single-purpose function below (waitForWakeWord, listenForCommand, etc.) — that keeps this
+    // single-purpose function below (waitForWakeWord, listenForCommand, etc.), that keeps this
     // orchestrating function readable as a simple top-to-bottom story, and makes each step easy
     // to understand (and fix) on its own.
     //
@@ -308,7 +308,7 @@ class MainActivity : ComponentActivity() {
             val result = thinkAboutCommand(speechText) ?: return
 
             // Record this exchange in conversation history BEFORE speaking/acting, mirroring
-            // desktop's _record_exchange() — so even if a later step throws, the turn we already
+            // desktop's _record_exchange(), so even if a later step throws, the turn we already
             // got a response for is remembered on the next cycle.
             recordExchange(speechText, result.spokenText)
 
@@ -368,7 +368,7 @@ class MainActivity : ComponentActivity() {
 
     // ── Step 4: send the command to the assistant for processing ─
     // Updates the UI, then blocks until ClaudeService returns a result (or null if every
-    // provider — online Claude and offline Ollama — failed).
+    // provider, online Claude and offline Ollama, failed).
     private suspend fun thinkAboutCommand(speechText: String): ClaudeResult? {
         // Update the UI to show the assistant is thinking.
         assistantState = "🧠 Thinking..."
@@ -378,11 +378,11 @@ class MainActivity : ComponentActivity() {
         //   "online"  → use Claude API only
         //   "offline" → use Ollama locally only
         // The assistantMode is loaded from config (hardcoded to "auto" for now).
-        // conversationHistory is passed through so the provider can see prior turns — see
+        // conversationHistory is passed through so the provider can see prior turns, see
         // ClaudeService.process()'s doc comment for how each provider uses it.
         // The Anthropic API key is re-resolved from SettingsRepository on every call (rather
         // than cached like picovoiceAccessKey above), so a key the user just saved in Settings
-        // takes effect on the very next request — no app restart required.
+        // takes effect on the very next request, no app restart required.
         val result = ClaudeService.process(
             speechText,
             assistantMode,
@@ -401,13 +401,13 @@ class MainActivity : ComponentActivity() {
     // ── Record this turn in conversation history, then persist it ─
     // Appends the user's speech and the assistant's spoken reply to conversationHistory (in the
     // same {role, content} shape ClaudeService expects back), trims it to the last
-    // maxHistoryTurns entries, and saves it to disk immediately — mirroring desktop's
+    // maxHistoryTurns entries, and saves it to disk immediately, mirroring desktop's
     // per-cycle save_conversation_history() call so a crash or force-quit between cycles
     // doesn't lose the conversation.
     private fun recordExchange(userText: String, spokenText: String) {
         conversationHistory.add(ConversationTurn("user", userText))
         // Assistant turns are stored as "RESPONSE: <spokenText>" to match the RESPONSE:/ACTIONS:
-        // format the shared system prompt asks for — a replayed assistant turn then looks
+        // format the shared system prompt asks for, a replayed assistant turn then looks
         // exactly like a normal reply would, instead of a bare, format-less sentence.
         conversationHistory.add(ConversationTurn("assistant", "RESPONSE: $spokenText"))
         // Keep only the most recent maxHistoryTurns entries (list.takeLast() returns a new
@@ -420,8 +420,8 @@ class MainActivity : ComponentActivity() {
     // End of recordExchange().
 
     // ── Load conversation history saved by a previous run, if any ─
-    // Returns an empty list (rather than throwing) for every failure case — missing file,
-    // unreadable file, corrupt JSON — since history is a nice-to-have, not something worth
+    // Returns an empty list (rather than throwing) for every failure case, missing file,
+    // unreadable file, corrupt JSON, since history is a nice-to-have, not something worth
     // crashing startup over. Mirrors desktop's load_conversation_history().
     private fun loadConversationHistory(): MutableList<ConversationTurn> {
         if (!historyFile.exists()) {
@@ -436,7 +436,7 @@ class MainActivity : ComponentActivity() {
             }
             turns
         } catch (e: Exception) {
-            // Corrupt/unreadable history file — log and start fresh rather than crash.
+            // Corrupt/unreadable history file, log and start fresh rather than crash.
             e.printStackTrace()
             mutableListOf()
         }
@@ -444,7 +444,7 @@ class MainActivity : ComponentActivity() {
     // End of loadConversationHistory().
 
     // ── Persist conversation history to disk ──────────────────────
-    // Writes the current history as a JSON array of {"role", "content"} objects — the exact
+    // Writes the current history as a JSON array of {"role", "content"} objects, the exact
     // shape loadConversationHistory() above reads back. Failures are logged, not raised: losing
     // the ability to persist history should never crash the assistant mid-conversation.
     private fun saveConversationHistory(history: List<ConversationTurn>) {
@@ -486,7 +486,7 @@ class MainActivity : ComponentActivity() {
             // BUG FIX: "this" (the MainActivity itself, which IS a Context) must be passed
             // here. ActionRouter.execute()'s context parameter defaults to null when omitted,
             // and every branch inside ActionRouter only acts via a null-safe "context?.startActivity(...)"
-            // call — so without passing "this", every single action (open_app, search_web,
+            // call, so without passing "this", every single action (open_app, search_web,
             // send_sms, make_call) was silently doing NOTHING: the null-safe call short-circuits
             // and startActivity is never actually invoked. Passing "this" gives ActionRouter a
             // real Context so it can actually launch the browser, dialer, SMS app, etc.
@@ -514,7 +514,7 @@ class MainActivity : ComponentActivity() {
             // Set a listener: when the chime finishes playing, release the MediaPlayer resources.
             mediaPlayer?.setOnCompletionListener { it.release() }
         } catch (e: Exception) {
-            // Chime file doesn't exist yet — that's OK, we'll
+            // Chime file doesn't exist yet, that's OK, we'll
             // generate it later once the desktop version is done.
         }
         // End of try-catch.
@@ -539,12 +539,12 @@ class MainActivity : ComponentActivity() {
                 this,
                 // An array of permissions to request (just RECORD_AUDIO in this case).
                 arrayOf(Manifest.permission.RECORD_AUDIO),
-                // 1001 is a request code — it's used in onRequestPermissionsResult() to identify which request this was.
+                // 1001 is a request code, it's used in onRequestPermissionsResult() to identify which request this was.
                 1001
             )
             // Android will show a system dialog; the result comes back via onRequestPermissionsResult().
         }
-        // If permission is already granted, we do nothing — the app can already use the mic.
+        // If permission is already granted, we do nothing, the app can already use the mic.
     }
     // End of requestMicrophonePermission().
 }
@@ -567,14 +567,14 @@ fun MakeItSoTheme(content: @Composable () -> Unit) {
             secondary = androidx.compose.ui.graphics.Color(0xFF283593)
         )
     ) {
-        // Call the content lambda — this renders whatever composables are nested inside MakeItSoTheme.
+        // Call the content lambda, this renders whatever composables are nested inside MakeItSoTheme.
         content()
     }
     // End of MaterialTheme block.
 }
 // End of MakeItSoTheme.
 
-// MakeItSoScreen is the actual UI layout — a column of text, buttons, and cards centered on screen.
+// MakeItSoScreen is the actual UI layout, a column of text, buttons, and cards centered on screen.
 @Composable
 fun MakeItSoScreen(
     // state: the current status text to display (e.g., "Listening for 'Computer'...").
@@ -593,7 +593,7 @@ fun MakeItSoScreen(
     Box(modifier = Modifier.fillMaxSize()) {
     // Column arranges its children vertically, one on top of another (like a vertical flexbox).
     Column(
-        // Modifier decorates the Column — fillMaxSize() makes it take up the entire screen.
+        // Modifier decorates the Column, fillMaxSize() makes it take up the entire screen.
         modifier = Modifier
             .fillMaxSize()
             // Add 24dp of padding on all sides so content doesn't touch the screen edges.

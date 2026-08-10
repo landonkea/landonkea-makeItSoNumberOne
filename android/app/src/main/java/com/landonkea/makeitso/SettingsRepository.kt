@@ -1,14 +1,14 @@
 // ───────────────────────────────────────────────────────────────────
-// SettingsRepository.kt — persists user-editable API keys securely
+// SettingsRepository.kt, persists user-editable API keys securely
 // ───────────────────────────────────────────────────────────────────
 // Previously, the Anthropic API key and Picovoice access key were only
 // available via BuildConfig fields (app/build.gradle.kts), meaning
 // anyone who wasn't compiling the app themselves had no way to set
-// their own keys — a real usability gap. This file backs a Settings
+// their own keys, a real usability gap. This file backs a Settings
 // screen (SettingsActivity.kt) that lets the user view/edit both keys
 // at runtime, persisted with EncryptedSharedPreferences rather than
 // plain SharedPreferences (which stores values as cleartext XML on
-// disk — not appropriate for real API keys/secrets).
+// disk, not appropriate for real API keys/secrets).
 //
 // EncryptedSharedPreferences wraps a normal SharedPreferences file but
 // encrypts both keys and values using a "master key" that lives in the
@@ -16,7 +16,7 @@
 // disk are unreadable without the device's keystore.
 //
 // If the user hasn't entered their own key (or clears it), everything
-// falls back to the BuildConfig-injected value — preserving the
+// falls back to the BuildConfig-injected value, preserving the
 // existing build-time-injection option for anyone who prefers that
 // (e.g. CI builds, or a maintainer who bakes in their own key).
 // ───────────────────────────────────────────────────────────────────
@@ -42,7 +42,7 @@ object SettingsRepository {
     // intentionally NOT cached in a `by lazy` property: MasterKey.Builder
     // needs a Context, and holding on to a Context beyond the call that
     // needs it risks leaking whichever Activity happened to create it
-    // first. Re-opening the file per call is cheap — SharedPreferences
+    // first. Re-opening the file per call is cheap, SharedPreferences
     // itself is backed by an in-memory cache per (Context, file name)
     // pair that Android already keeps warm.
     private fun prefs(context: Context): SharedPreferences {
@@ -98,7 +98,7 @@ object SettingsRepository {
     // ── Fallback logic (pure, unit-testable) ─────────────────────
     // EncryptedSharedPreferences itself needs the Android Keystore, which
     // doesn't exist in a plain JVM unit test (only on a device/emulator),
-    // so this piece — "prefer what the user typed, unless it's empty" —
+    // so this piece, "prefer what the user typed, unless it's empty",
     // is pulled out into its own pure function with no Android
     // dependency, so SettingsRepositoryTest.kt can exercise it directly.
     internal fun resolveKey(stored: String?, buildConfigFallback: String): String =

@@ -10,7 +10,7 @@
 // we can't click buttons in other apps or control system settings.
 // ──────────────────────────────────────────────────────────────────────
 
-// Import the UIKit framework — this gives us access to the iPhone's app
+// Import the UIKit framework, this gives us access to the iPhone's app
 // management system. UIApplication.shared lets us open URLs (which is
 // how we launch Safari, Messages, Phone, and other apps on iOS).
 // UIKit is the older iOS framework (SwiftUI is newer) but for opening
@@ -39,12 +39,12 @@ class ActionRouter {
         // Use a switch statement to pick the right code based on the
         // action type. A switch is cleaner than multiple if-else chains
         // and makes it easy to add new action types later. Swift's switch
-        // must be exhaustive — we handle every case including unknown ones.
+        // must be exhaustive, we handle every case including unknown ones.
         // On non-iOS platforms (e.g., macOS testing), we just log actions.
         #if canImport(UIKit)
         switch action.actionType {
 
-        // Handle the "search_web" action — opens Safari to search for
+        // Handle the "search_web" action, opens Safari to search for
         // something using DuckDuckGo (a privacy-focused search engine).
         case "search_web":
             // Try to get the search query from the parameters dictionary.
@@ -69,11 +69,11 @@ class ActionRouter {
                 // URL, which launches Safari (or shows a browser tab).
                 UIApplication.shared.open(url)
             }
-            // Close the if block — if the URL was invalid (which
+            // Close the if block, if the URL was invalid (which
             // shouldn't happen since we constructed it carefully),
             // we just silently do nothing.
 
-        // Handle the "open_app" action — tries to open another app on
+        // Handle the "open_app" action, tries to open another app on
         // the iPhone by using its URL scheme (like "twitter://").
         case "open_app":
             // Get the app name from the parameters. The guard ensures
@@ -88,7 +88,7 @@ class ActionRouter {
             let scheme = "\(appName.lowercased())://"
             // Try to create a URL from the scheme string. If the scheme
             // is valid (e.g., "twitter://"), we get a URL object. Then
-            // check if iOS can open this URL — `canOpenURL` returns true
+            // check if iOS can open this URL, `canOpenURL` returns true
             // if an app on the device has registered this URL scheme.
             if let url = URL(string: scheme),
                UIApplication.shared.canOpenURL(url) {
@@ -97,10 +97,10 @@ class ActionRouter {
                 // "twitter://" would launch the Twitter app if installed.
                 UIApplication.shared.open(url)
             }
-            // Close the if block — if no app is registered for this
+            // Close the if block, if no app is registered for this
             // scheme, we silently do nothing rather than showing an error.
 
-        // Handle the "send_sms" action — opens the Messages app with
+        // Handle the "send_sms" action, opens the Messages app with
         // a pre-filled phone number and message text.
         case "send_sms":
             // Get both the phone number and message text from the
@@ -122,10 +122,10 @@ class ActionRouter {
                 // send it. We don't send automatically for safety.
                 UIApplication.shared.open(url)
             }
-            // Close the if block — if the URL is malformed, silently
+            // Close the if block, if the URL is malformed, silently
             // do nothing instead of crashing.
 
-        // Handle the "make_call" action — opens the Phone app with a
+        // Handle the "make_call" action, opens the Phone app with a
         // number ready to dial (but doesn't call automatically).
         case "make_call":
             // Get the phone number from the parameters. Guard ensures
@@ -143,7 +143,7 @@ class ActionRouter {
                 // does nothing (no phone app available).
                 UIApplication.shared.open(url)
             }
-            // Close the if block — if the URL is invalid, silently
+            // Close the if block, if the URL is invalid, silently
             // skip the call attempt.
 
         // Handle ANY action type that we don't recognize. The `default`

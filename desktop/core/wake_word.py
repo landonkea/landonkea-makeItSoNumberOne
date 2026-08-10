@@ -1,5 +1,5 @@
 # ───────────────────────────────────────────────────────────────────
-# wake_word.py — listens for "Computer" on the microphone
+# wake_word.py, listens for "Computer" on the microphone
 # ───────────────────────────────────────────────────────────────────
 # This module uses Picovoice Porcupine to detect the wake word
 # "Computer" (just like on Star Trek TNG). Porcupine is a tiny,
@@ -23,7 +23,7 @@
 # and raw bytes (like turning microphone audio into numbers).
 import struct
 # Import the "sys" module so we can access system-specific stuff
-# (though we don't actually use it in this file — it's here for
+# (though we don't actually use it in this file, it's here for
 # consistency with other modules in the project).
 import sys
 
@@ -54,10 +54,10 @@ def wait_for_wake_word(config):
     1. The wake word "Computer" is detected, OR
     2. The user presses Ctrl+C to quit.
 
-    It's broken into smaller helper functions below — one to check
+    It's broken into smaller helper functions below, one to check
     the required libraries are installed, one to read/validate the
     AccessKey, one to start up Porcupine + the microphone, and one
-    to run the actual listen loop — so each step can be understood
+    to run the actual listen loop, so each step can be understood
     (and tested) on its own.
     """
     # ── Step 1: make sure both required libraries are installed ──
@@ -99,11 +99,11 @@ def wait_for_wake_word(config):
     # a KeyboardInterrupt exception. We catch it here to shut down
     # gracefully instead of showing an ugly error message.
     except KeyboardInterrupt:
-        # User pressed Ctrl+C — clean up and exit.
+        # User pressed Ctrl+C, clean up and exit.
         print()
         print("  [wake] Shutting down...")
         return False
-    # The "finally" block runs NO MATTER WHAT — whether the try
+    # The "finally" block runs NO MATTER WHAT, whether the try
     # succeeded, failed, or was interrupted. This guarantees we
     # always clean up resources like the microphone and Porcupine.
     finally:
@@ -157,7 +157,7 @@ def _import_pyaudio():
     except ImportError:
         print()
         print("  ╔══════════════════════════════════════════════════╗")
-        print("  ║  PyAudio not installed — needed for microphone. ║")
+        print("  ║  PyAudio not installed, needed for microphone. ║")
         print("  ║                                                ║")
         print("  ║  Run:  pip install pyaudio                     ║")
         print("  ╚══════════════════════════════════════════════════╝")
@@ -188,7 +188,7 @@ def _init_porcupine(pvporcupine, access_key):
 
     NOTE: We pass `keywords=["computer"]` below, which tells
     pvporcupine to use its own bundled built-in "computer" model.
-    pvporcupine finds that file internally — we don't need to
+    pvporcupine finds that file internally, we don't need to
     locate it ourselves. (An earlier version of this function
     manually hunted for the model's file path here, but that
     result was never actually used anywhere, so it was removed.)
@@ -228,7 +228,7 @@ def _detection_loop(porcupine, audio_stream):
     RETURNS
     -------
     bool
-        Always True — this function only returns once the wake word
+        Always True, this function only returns once the wake word
         has actually been heard; any other way out of listening
         (Ctrl+C, an error) happens via an exception, which the
         caller's try/except/finally handles instead.
@@ -251,7 +251,7 @@ def _detection_loop(porcupine, audio_stream):
             "<" + "h" * porcupine.frame_length, pcm
         )
 
-        # Process the audio — Porcupine returns the index of
+        # Process the audio, Porcupine returns the index of
         # the detected keyword, or -1 if nothing was heard.
         keyword_index = porcupine.process(pcm_tuple)
 

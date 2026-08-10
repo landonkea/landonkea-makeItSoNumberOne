@@ -1,5 +1,5 @@
 # ───────────────────────────────────────────────────────────────────
-# sentence_splitter.py — incremental sentence-boundary detection
+# sentence_splitter.py, incremental sentence-boundary detection
 # ───────────────────────────────────────────────────────────────────
 # This module exists to let streaming TTS start speaking the FIRST
 # sentence of an AI reply while later sentences are still being
@@ -9,21 +9,21 @@
 # chunks (sometimes a few characters, sometimes a whole word), and it
 # must not mistake things like "Dr. Smith", "e.g.", "3.14", or "..."
 # for sentence endings. Every character of every chunk fed in is
-# eventually returned to the caller — either as part of a completed
+# eventually returned to the caller, either as part of a completed
 # sentence, or (for whatever's left over at the very end) via
-# flush() — so no words are ever lost, delayed forever, or duplicated.
+# flush(), so no words are ever lost, delayed forever, or duplicated.
 #
-# This file is pure logic — no I/O, no audio, no network — on purpose,
+# This file is pure logic, no I/O, no audio, no network, on purpose,
 # so it's trivial to unit test (see tests/test_sentence_splitter.py).
 # ───────────────────────────────────────────────────────────────────
 
 # Common abbreviations that end in a period but do NOT end a
 # sentence. Checked case-insensitively against the word immediately
-# before a candidate '.' — so "Dr." matches "dr" here even though the
+# before a candidate '.', so "Dr." matches "dr" here even though the
 # text has a capital D.
 #
 # NOTE: multi-period abbreviations like "e.g.", "i.e.", "a.m.", "U.S."
-# don't need entries here — they're handled by the "single letter
+# don't need entries here, they're handled by the "single letter
 # before the period" rule below, since "e.g." is really the two
 # one-letter tokens "e" and "g" each followed by a period with no
 # space in between the first period and "g".
@@ -41,7 +41,7 @@ class SentenceSplitter:
     """
     Feed it text as it arrives (in any size chunks) and it hands back
     complete sentences as soon as it's confident a sentence has
-    actually ended — buffering whatever's ambiguous until either more
+    actually ended, buffering whatever's ambiguous until either more
     text arrives to resolve it, or flush() is called at end-of-stream.
 
     USAGE
@@ -117,7 +117,7 @@ class SentenceSplitter:
 
             if j + 1 >= n:
                 # We're at the end of everything we've received so
-                # far and don't know what comes next — could be a
+                # far and don't know what comes next, could be a
                 # space (real boundary) or a digit/letter (decimal
                 # number, abbreviation). Wait for more text.
                 return None
@@ -125,7 +125,7 @@ class SentenceSplitter:
             after = buf[j + 1]
             if not after.isspace():
                 # Punctuation immediately followed by a non-space
-                # character: "3.14", "U.S.", "e.g.rest" — not a
+                # character: "3.14", "U.S.", "e.g.rest", not a
                 # sentence boundary. Keep scanning past it.
                 i = j + 1
                 continue
@@ -153,7 +153,7 @@ class SentenceSplitter:
         if len(token) == 1:
             # A single letter right before a period is almost always
             # an initial ("J. R. R. Tolkien") or the first/second
-            # letter of a multi-period abbreviation ("e.g.", "U.S.") —
+            # letter of a multi-period abbreviation ("e.g.", "U.S."),
             # not the end of a sentence.
             return True
         return token.lower() in _ABBREVIATIONS
@@ -163,7 +163,7 @@ def split_sentences(text):
     """
     Pure convenience function: split a COMPLETE string (not a stream)
     into a list of sentences. Equivalent to feeding the whole string
-    into a SentenceSplitter and then flushing it — used by the
+    into a SentenceSplitter and then flushing it, used by the
     non-streaming fallback path and by tests that don't care about
     incremental chunking.
     """

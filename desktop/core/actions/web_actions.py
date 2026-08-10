@@ -1,5 +1,5 @@
 # ───────────────────────────────────────────────────────────────────
-# actions/web_actions.py — searches the internet
+# actions/web_actions.py, searches the internet
 # ───────────────────────────────────────────────────────────────────
 # This module lets Claude search the web for information.
 #
@@ -16,7 +16,7 @@
 # not here at the top of the file. If we imported it here and the
 # `requests` library wasn't installed, Python would raise ImportError
 # the moment this module gets loaded (which happens automatically at
-# startup via actions/__init__.py) — crashing the whole app before it
+# startup via actions/__init__.py), crashing the whole app before it
 # even starts, instead of showing the friendly "please pip install"
 # message below. Importing inside the function's try/except lets us
 # catch that case and fail gracefully, matching the pattern used in
@@ -62,7 +62,7 @@ def search_web(query, config):
 
     # Print a status message showing what we're searching for.
     # The `[web]` tag helps identify which module printed this message.
-    # `f"..."` is an f-string — it lets us embed variables (like {query})
+    # `f"..."` is an f-string, it lets us embed variables (like {query})
     # directly inside the string.
     print(f"  [web] Searching for: {query}")
 
@@ -119,7 +119,7 @@ def search_web(query, config):
 # DuckDuckGo and hands back the parsed JSON. Pulling this out of
 # search_web() means that function does ONE job (build the final
 # text answer) while this one does a different job (talk to the
-# network) — each is easier to read and test on its own.
+# network), each is easier to read and test on its own.
 def _fetch_duckduckgo_results(requests, query):
     """
     Send the search request to DuckDuckGo's Instant Answer API.
@@ -139,7 +139,7 @@ def _fetch_duckduckgo_results(requests, query):
         if the HTTP request came back with a non-200 status code.
     """
     # ── DuckDuckGo Instant Answer API ────────────────────────
-    # This API doesn't need any authentication — it's free and
+    # This API doesn't need any authentication, it's free and
     # open. Just send a GET request with the query.
     # Define the API endpoint URL. An "endpoint" is like a specific
     # phone number at a company that handles a specific type of request.
@@ -162,9 +162,9 @@ def _fetch_duckduckgo_results(requests, query):
 
     # Send the GET request to DuckDuckGo's API.
     # `requests.get()` is like typing a URL into a browser and pressing
-    # Enter — it fetches the data from the server.
+    # Enter, it fetches the data from the server.
     # The `params` dictionary gets converted into URL parameters.
-    # `timeout=15` means "wait up to 15 seconds, then give up" —
+    # `timeout=15` means "wait up to 15 seconds, then give up",
     # this prevents the program from hanging forever on a slow network.
     response = requests.get(
         url,
@@ -190,7 +190,7 @@ def _fetch_duckduckgo_results(requests, query):
 # the human-readable text block the user will hear/read. Splitting
 # this out of search_web() means the "how do I talk to the network"
 # logic and the "how do I format an answer" logic don't live in the
-# same block of code — each piece has exactly one job.
+# same block of code, each piece has exactly one job.
 def _format_search_results(data):
     """
     Build a readable text summary from DuckDuckGo's parsed JSON.

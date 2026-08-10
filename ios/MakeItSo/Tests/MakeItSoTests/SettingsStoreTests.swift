@@ -3,7 +3,7 @@
 // SettingsRepositoryTest.kt.
 //
 // resolveKeyTests exercise the pure "prefer the user's saved value,
-// else fall back" logic with no Keychain dependency at all — mirroring
+// else fall back" logic with no Keychain dependency at all, mirroring
 // exactly what SettingsRepositoryTest.kt checks on the Android side:
 // user value present, nothing stored (nil), stored is empty string,
 // stored is whitespace-only, and that a valid value is NOT trimmed at
@@ -15,7 +15,7 @@
 // functions, which `swift test` can run for real on macOS. To keep
 // repeated runs idempotent, every test that writes to the Keychain
 // deletes what it wrote in a `defer` block, and uses the app's real
-// account identifiers only transiently — leaving the Keychain exactly
+// account identifiers only transiently, leaving the Keychain exactly
 // as it found it (clear -> set -> assert -> clear -> assert) rather
 // than depending on ordering between tests.
 // ───────────────────────────────────────────────────────────────────
@@ -56,7 +56,7 @@ final class SettingsStoreTests: XCTestCase {
     }
 
     func testDoesNotTrimOrOtherwiseAlterAValidStoredValue() {
-        // resolveKey itself should not mutate the value — trimming happens
+        // resolveKey itself should not mutate the value, trimming happens
         // at write time in setAnthropicApiKey()/setPicovoiceAccessKey(),
         // not at read time here.
         XCTAssertEqual(

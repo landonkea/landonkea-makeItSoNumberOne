@@ -1,5 +1,5 @@
 # ───────────────────────────────────────────────────────────────────
-# tests/test_security.py — tests for the run_command / read_file
+# tests/test_security.py, tests for the run_command / read_file
 # security gates in core/actions/system.py
 # ───────────────────────────────────────────────────────────────────
 # WHY THESE TESTS EXIST
@@ -17,7 +17,7 @@
 #   cd desktop
 #   python3 -m unittest discover -s tests -v
 #
-# (Uses only Python's built-in `unittest` — no pytest or other test
+# (Uses only Python's built-in `unittest`, no pytest or other test
 # framework needs to be installed.)
 # ───────────────────────────────────────────────────────────────────
 
@@ -39,12 +39,12 @@ class ReadFileDenylistTests(unittest.TestCase):
 
     def test_denied_path_is_rejected(self):
         # ~/.ssh/id_rsa is inside the default denied-path prefix
-        # "~/.ssh/" — read_file should refuse it outright, whether or
+        # "~/.ssh/", read_file should refuse it outright, whether or
         # not the file actually exists on this machine.
         result = system.read_file("~/.ssh/id_rsa")
         self.assertIn("Access denied", result)
         # It should also never have gotten as far as actually trying
-        # to open the file — a "File not found" message would mean
+        # to open the file, a "File not found" message would mean
         # the denylist check was skipped instead of firing.
         self.assertNotIn("File not found", result)
 
@@ -57,7 +57,7 @@ class ReadFileDenylistTests(unittest.TestCase):
     def test_path_traversal_into_denied_dir_is_rejected(self):
         # "~/Desktop/../.ssh/id_rsa" doesn't literally start with the
         # denylist prefix as TEXT, but it resolves to exactly that
-        # protected location — the denylist check must catch this by
+        # protected location, the denylist check must catch this by
         # resolving the absolute path first, not just string-prefix
         # matching the raw input.
         result = system.read_file("~/Desktop/../.ssh/id_rsa")
@@ -110,7 +110,7 @@ class RunCommandConfirmationTests(unittest.TestCase):
     def test_unconfirmed_dangerous_command_does_not_execute(self):
         # "touch" is NOT on the default allowlist, and
         # command_confirmation_required defaults to True even with no
-        # config passed at all — so this must NOT actually run yet.
+        # config passed at all, so this must NOT actually run yet.
         command = f"touch {self.marker_path}"
         result = system.run_command(command)  # no config -> defaults apply
 
@@ -118,7 +118,7 @@ class RunCommandConfirmationTests(unittest.TestCase):
         self.assertFalse(
             os.path.exists(self.marker_path),
             "run_command executed a non-allowlisted command without "
-            "confirmation — the safety gate did not hold it back.",
+            "confirmation, the safety gate did not hold it back.",
         )
         # The command should now be sitting in the pending slot,
         # ready for confirm_pending_command() to pick up.
@@ -130,7 +130,7 @@ class RunCommandConfirmationTests(unittest.TestCase):
         self.assertIn("CONFIRMATION REQUIRED", pending_result)
         self.assertFalse(os.path.exists(self.marker_path))
 
-        # Now simulate the user saying "Computer, confirm" — the
+        # Now simulate the user saying "Computer, confirm", the
         # router calls confirm_pending_command() with NO params.
         system.confirm_pending_command()
 
@@ -147,7 +147,7 @@ class RunCommandConfirmationTests(unittest.TestCase):
     def test_confirmation_not_required_runs_immediately(self):
         # An explicit opt-out (config says confirmation isn't
         # required) should behave like the OLD, unguarded run_command
-        # — run right away, no pending state.
+        #, run right away, no pending state.
         config = {"security": {"command_confirmation_required": False}}
         command = f"touch {self.marker_path}"
         system.run_command(command, config)
@@ -169,7 +169,7 @@ class OutputRedactionTests(unittest.TestCase):
 
     def test_redact_secrets_catches_fake_api_key(self):
         fake_key = "sk-ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-        text = f"Your API key is {fake_key} — keep it secret."
+        text = f"Your API key is {fake_key}, keep it secret."
         redacted = system.redact_secrets(text)
         self.assertNotIn(fake_key, redacted)
         self.assertIn("[REDACTED", redacted)
@@ -185,7 +185,7 @@ class OutputRedactionTests(unittest.TestCase):
 
     def test_run_command_output_is_redacted_end_to_end(self):
         # "echo" is on the default allowlist, so this runs
-        # immediately — good, because it lets us test the FULL path
+        # immediately, good, because it lets us test the FULL path
         # (allowlisted command -> subprocess -> truncate -> redact)
         # in one shot rather than just unit-testing redact_secrets()
         # in isolation.

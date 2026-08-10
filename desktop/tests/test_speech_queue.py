@@ -1,5 +1,5 @@
 # ───────────────────────────────────────────────────────────────────
-# tests/test_speech_queue.py — tests for core/tts.py's SpeechQueue
+# tests/test_speech_queue.py, tests for core/tts.py's SpeechQueue
 # ───────────────────────────────────────────────────────────────────
 # WHY THESE TESTS EXIST
 # ----------------------
@@ -94,7 +94,7 @@ class SpeechQueueOrderingTests(unittest.TestCase):
         queue.enqueue("Two.")
         queue.wait_done()
         self.assertEqual(spoken, ["One.", "Two."])
-        # The worker is still alive after wait_done() — more can be
+        # The worker is still alive after wait_done(), more can be
         # enqueued afterward.
         queue.enqueue("Three.")
         queue.close()
@@ -118,7 +118,7 @@ class SpeechQueueOrderingTests(unittest.TestCase):
 
     def test_close_with_nothing_ever_enqueued_is_a_harmless_no_op(self):
         queue = SpeechQueue(speak_fn=lambda t: None)
-        # Never called enqueue() — the worker thread was never even
+        # Never called enqueue(), the worker thread was never even
         # started. close() must not hang or raise.
         queue.close()
 

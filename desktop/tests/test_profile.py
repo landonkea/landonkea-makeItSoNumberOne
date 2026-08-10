@@ -1,5 +1,5 @@
 # ───────────────────────────────────────────────────────────────────
-# tests/test_profile.py — tests for core/profile.py personalization
+# tests/test_profile.py, tests for core/profile.py personalization
 # ───────────────────────────────────────────────────────────────────
 # WHY THESE TESTS EXIST
 # ----------------------

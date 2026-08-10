@@ -1,8 +1,8 @@
-# ── ai.py — AI Brain (Online via Claude + Offline via Ollama/Llama) ──
+# ── ai.py, AI Brain (Online via Claude + Offline via Ollama/Llama) ──
 # This module is the "brain" of the voice assistant.
 # TWO modes:
-#   ONLINE:  Claude API (Anthropic) — smarter, needs internet
-#   OFFLINE: Ollama + Llama (local) — free, runs on your own machine
+#   ONLINE:  Claude API (Anthropic), smarter, needs internet
+#   OFFLINE: Ollama + Llama (local), free, runs on your own machine
 # The `process_with_ai()` function tries online first. If it fails
 # (no internet, no API key), it automatically falls back to offline.
 
@@ -13,7 +13,7 @@ import json
 # (used below to locate the shared system prompt file).
 import os
 # Import `re`, Python's regular expression module. Only used now as
-# a LEGACY fallback parser — see _parse_response_legacy() below — for
+# a LEGACY fallback parser, see _parse_response_legacy() below, for
 # the old hand-rolled "RESPONSE: ... ACTIONS: ..." text format, in
 # case a model ever ignores the JSON instruction in the system
 # prompt and replies in the old shape anyway.
@@ -26,18 +26,18 @@ import re
 from core.sentence_splitter import SentenceSplitter
 
 
-# ── get_system_prompt() — Loads the Star Trek personality prompt ──
+# ── get_system_prompt(), Loads the Star Trek personality prompt ──
 # This is the same across ALL platforms and ALL modes.
 # Tells the AI to act like the Enterprise computer and respond in
 # the structured format (RESPONSE: ... ACTIONS: ...).
 # ── JSON output format override ───────────────────────────────────
 # shared/prompts/system_prompt.txt is loaded (unmodified) by ALL
-# THREE platforms — desktop, Android's ClaudeService.kt, and iOS's
+# THREE platforms, desktop, Android's ClaudeService.kt, and iOS's
 # ClaudeService.swift, which bundles the same file as a resource and
 # falls back to an inline copy of the same RESPONSE:/ACTIONS: text
 # format if the bundled copy is missing. That means we can't change
 # the shared file's output-format instructions here without also
-# updating both mobile parsers in lockstep — out of scope for this
+# updating both mobile parsers in lockstep, out of scope for this
 # pass (see the desktop-only decision explained in the project
 # notes). Instead, desktop appends this addendum to the shared
 # prompt, which explicitly tells the model to IGNORE the shared
@@ -47,7 +47,7 @@ from core.sentence_splitter import SentenceSplitter
 # completely unaffected.
 _JSON_FORMAT_ADDENDUM = """
 
-IMPORTANT — OUTPUT FORMAT OVERRIDE FOR THIS CLIENT:
+IMPORTANT, OUTPUT FORMAT OVERRIDE FOR THIS CLIENT:
 Ignore the "RESPONSE:" / "ACTIONS:" text format described above.
 Instead, reply with ONLY a single JSON object, no markdown code
 fences, no commentary before or after it, in exactly this shape:
@@ -59,32 +59,32 @@ Rules:
 - "actions" is always an array (use [] if no actions are needed).
 - Every array entry needs both "action" (a string) and "params" (an
   object, possibly empty: {}).
-- Output must be valid JSON — a machine parses it with json.loads(),
+- Output must be valid JSON, a machine parses it with json.loads(),
   not a human, so it must parse on the first try.
 
 This desktop client also supports SEVEN additional action types not
 listed above:
 
-- "sleep_mode" (params: duration_seconds, optional — defaults to 300
+- "sleep_mode" (params: duration_seconds, optional, defaults to 300
   if omitted). Use it when the user asks you to stop listening for a
-  while — e.g. "Computer, stop listening", "go to sleep", "mute
+  while, e.g. "Computer, stop listening", "go to sleep", "mute
   yourself", "leave me alone for 10 minutes". Respond with the
   sleep_mode action AND a short spoken acknowledgement in "response"
   (e.g. "Entering sleep mode.").
-- "get_weather" (params: location, optional — uses the user's
+- "get_weather" (params: location, optional, uses the user's
   configured default location if omitted). Use it when the user asks
   about current weather conditions anywhere.
-- "get_calendar_events" (params: days, optional int — defaults to 7).
+- "get_calendar_events" (params: days, optional int, defaults to 7).
   Use it when the user asks what's on their calendar / schedule /
   upcoming events.
-- "add_reminder" (params: text — what to be reminded of). Use it when
+- "add_reminder" (params: text, what to be reminded of). Use it when
   the user asks you to remind them of something or add a to-do.
 - "list_reminders" (no params). Use it when the user asks what their
   reminders/to-dos are.
-- "complete_reminder" (params: query — text that identifies which
+- "complete_reminder" (params: query, text that identifies which
   reminder, e.g. the words the user used to describe it). Use it when
   the user says a reminder is done / to check it off / to complete it.
-- "journal_entry" (params: text — what to save, transcribed from what
+- "journal_entry" (params: text, what to save, transcribed from what
   the user said). Use it when the user says something like "Computer,
   journal entry: ..." or asks you to log/save/record a journal entry
   or a thought. Requires the journal_entry plugin to be active (see
@@ -93,7 +93,7 @@ listed above:
 
 Each of these returns its result as plain text that you should relay
 back to the user conversationally in a FUTURE turn (once you see the
-action's result in the conversation) — for the turn where you ISSUE
+action's result in the conversation), for the turn where you ISSUE
 the action itself, just acknowledge briefly in "response" (e.g. "Let
 me check.", "One moment.", "Adding that now.").
 """
@@ -130,7 +130,7 @@ def get_system_prompt():
     return base_prompt + _JSON_FORMAT_ADDENDUM
 
 
-# ── process_with_ai() — Main entry point (used by make_it_so.py) ──
+# ── process_with_ai(), Main entry point (used by make_it_so.py) ──
 # Tries online first, falls back to offline if online fails.
 def process_with_ai(user_text, config, conversation_history=None,
                      on_sentence=None):
@@ -151,14 +151,14 @@ def process_with_ai(user_text, config, conversation_history=None,
         Optional callback: on_sentence(sentence_text). When provided
         AND the online Claude path is used, it's called once per
         COMPLETE sentence of the spoken reply as soon as that
-        sentence is ready — while the rest of the reply may still be
-        generating — so a caller can start speaking it immediately
+        sentence is ready, while the rest of the reply may still be
+        generating, so a caller can start speaking it immediately
         (see core/tts.py's SpeechQueue). If the result dict's
         "streamed" key comes back True, every sentence of
         "spoken_text" has already been delivered via on_sentence and
         the caller should NOT speak spoken_text again itself.
         Ignored (never called) for the offline Ollama path, which
-        doesn't support streaming — see process_with_ollama().
+        doesn't support streaming, see process_with_ollama().
 
     RETURNS
     -------
@@ -176,7 +176,7 @@ def process_with_ai(user_text, config, conversation_history=None,
     api_key = config.get("anthropic_api_key", "")
 
     # Only attempt the online path if the user allows it ("auto" or
-    # "online") AND we actually have an API key to use — there's no
+    # "online") AND we actually have an API key to use, there's no
     # point calling Claude's API with an empty key, it would just
     # fail every time.
     if mode in ("auto", "online") and api_key:
@@ -186,27 +186,27 @@ def process_with_ai(user_text, config, conversation_history=None,
             )
         else:
             result = process_with_claude(user_text, config, conversation_history)
-        # A non-None result means Claude answered successfully —
+        # A non-None result means Claude answered successfully,
         # we're done, no need to try the offline model too.
         if result is not None:
             result.setdefault("streamed", False)
             return result
         # If the user explicitly locked the mode to "online" (not
         # "auto"), we respect that choice and do NOT silently fall
-        # back to a different AI — we'd rather report failure than
+        # back to a different AI, we'd rather report failure than
         # surprise the user with an offline answer they didn't ask
         # for.
         if mode == "online":
             print("  [ai] Online mode failed and mode is 'online'.")
             print("  [ai] No fallback attempted.")
             return None
-        print("  [ai] Online AI failed — falling back to offline.")
+        print("  [ai] Online AI failed, falling back to offline.")
 
     # Offline fallback (Ollama). We reach this line either because
     # mode is "offline" outright, or because "auto" mode's online
     # attempt above failed and fell through. Ollama has no streaming
     # support here (see process_with_ollama()'s "stream": False), so
-    # on_sentence is never called for this path — the caller falls
+    # on_sentence is never called for this path, the caller falls
     # back to speaking the whole "spoken_text" itself once we return,
     # exactly like before streaming TTS existed.
     print("  [ai] Using offline AI (Ollama)...")
@@ -216,14 +216,14 @@ def process_with_ai(user_text, config, conversation_history=None,
     return result
 
 
-# ── process_with_claude() — Online: uses Anthropic's Claude API ──
+# ── process_with_claude(), Online: uses Anthropic's Claude API ──
 def process_with_claude(user_text, config, conversation_history=None):
     """
     Send the conversation to Anthropic's Claude API and parse the
     structured RESPONSE/ACTIONS reply.
 
-    Returns None (instead of raising an exception) on any failure —
-    missing key, network error, bad HTTP status, empty reply — so
+    Returns None (instead of raising an exception) on any failure,
+    missing key, network error, bad HTTP status, empty reply, so
     that process_with_ai() can cleanly fall back to the offline model
     without needing a try/except of its own around this call.
     """
@@ -246,7 +246,7 @@ def process_with_claude(user_text, config, conversation_history=None):
                 "x-api-key": api_key,
                 # Anthropic versions its API by date so that older
                 # integrations keep working even after the API
-                # changes shape in the future — this pins us to a
+                # changes shape in the future, this pins us to a
                 # known request/response format.
                 "anthropic-version": "2023-06-01",
                 "content-type": "application/json"
@@ -310,14 +310,14 @@ def _extract_claude_text(response_json):
     return ""
 
 
-# ── process_with_claude_streaming() — streaming TTS entry point ──
+# ── process_with_claude_streaming(), streaming TTS entry point ──
 def process_with_claude_streaming(user_text, config, conversation_history=None,
                                    on_sentence=None):
     """
     Like process_with_claude(), but reads Claude's reply as an SSE
     (server-sent events) stream and calls on_sentence(text) for each
     complete sentence of the "response" field as soon as it's ready
-    — instead of waiting for the whole JSON reply, actions and all,
+   , instead of waiting for the whole JSON reply, actions and all,
     to finish generating first.
 
     WHY THIS IS SAFE TO STREAM
@@ -328,7 +328,7 @@ def process_with_claude_streaming(user_text, config, conversation_history=None,
     raw text stream for that field's string value character by
     character (handling JSON escapes) and hands decoded characters to
     a SentenceSplitter, which only releases a sentence once it's sure
-    where it ends (see core/sentence_splitter.py) — abbreviations,
+    where it ends (see core/sentence_splitter.py), abbreviations,
     decimals, etc. This means on_sentence() sees the same sentences
     a full-text parse would produce, just earlier.
 
@@ -343,12 +343,12 @@ def process_with_claude_streaming(user_text, config, conversation_history=None,
     dict or None
         Same shape as process_with_claude(), plus "streamed": True.
         Returns None ONLY if the request failed before ANY text
-        streamed back (bad key, network error, non-200 status) — at
+        streamed back (bad key, network error, non-200 status), at
         that point nothing has been spoken yet, so the caller can
         safely retry with the plain non-streaming path. If the
         connection drops PARTWAY through, we do not return None
         (some sentences may already have been spoken via
-        on_sentence — losing that result would leave the caller with
+        on_sentence, losing that result would leave the caller with
         no record of what the user already heard), we instead return
         best-effort results from whatever text arrived.
     """
@@ -357,7 +357,7 @@ def process_with_claude_streaming(user_text, config, conversation_history=None,
         print("  [ai] No Anthropic API key found in config.yaml.")
         return None
     if on_sentence is None:
-        # Nobody wants sentences as they arrive — the plain
+        # Nobody wants sentences as they arrive, the plain
         # non-streaming call is simpler and behaves identically for
         # the final result.
         return process_with_claude(user_text, config, conversation_history)
@@ -428,7 +428,7 @@ def process_with_claude_streaming(user_text, config, conversation_history=None,
     except Exception as e:
         print(f"  [ai] Claude streaming error: {e}")
         if not any_text_received:
-            # Nothing was ever spoken — safe for the caller to retry
+            # Nothing was ever spoken, safe for the caller to retry
             # with the ordinary non-streaming path instead.
             return None
         # Some sentences may already have been spoken. Fall through
@@ -447,11 +447,11 @@ class _JSONResponseFieldExtractor:
     """
     Incrementally pulls the decoded string VALUE of one field (by
     default "response") out of a streaming JSON object shaped like
-    {"response": "text...", "actions": [...]} — without needing the
+    {"response": "text...", "actions": [...]}, without needing the
     whole JSON object to have arrived yet.
 
-    This is deliberately narrow — not a general JSON streaming
-    parser — it only needs to handle the exact shape our system
+    This is deliberately narrow, not a general JSON streaming
+    parser, it only needs to handle the exact shape our system
     prompt asks the model for: a flat object with a "response"
     string field. It DOES fully handle JSON string escapes (\\",
     \\\\, \\n, \\t, \\uXXXX, etc.) since Claude's replies routinely
@@ -502,7 +502,7 @@ class _JSONResponseFieldExtractor:
                 # Any whitespace between ':' and the opening quote is
                 # simply skipped; anything else would mean the field
                 # isn't a string, which shouldn't happen given our
-                # system prompt — we just stay in this state rather
+                # system prompt, we just stay in this state rather
                 # than crashing.
             elif self._state == self._IN_STRING:
                 decoded = self._consume_string_char(ch)
@@ -529,7 +529,7 @@ class _JSONResponseFieldExtractor:
             if ch == "u":
                 self._unicode_digits = ""
                 return None
-            # Unknown escape sequence — emit the character literally
+            # Unknown escape sequence, emit the character literally
             # rather than silently dropping it.
             return ch
 
@@ -547,8 +547,8 @@ def _import_requests():
     """
     Imported lazily (not at module load time) so a machine without
     the `requests` library installed can still import this whole
-    module — e.g. to use _is_ollama_running()'s urllib-based
-    reachability check — without crashing at startup. Split into its
+    module, e.g. to use _is_ollama_running()'s urllib-based
+    reachability check, without crashing at startup. Split into its
     own function (mirroring core/actions/integrations.py's pattern)
     so tests can monkeypatch just this one function to inject a fake
     `requests` module instead of touching the real network.
@@ -561,7 +561,7 @@ _OLLAMA_BASE_URL = "http://localhost:11434"
 
 
 # ── Model capability hints ────────────────────────────────────────
-# Deliberately NOT a full capability-detection system — just a small,
+# Deliberately NOT a full capability-detection system, just a small,
 # config-overridable lookup table so callers can make a reasonable
 # guess about context-window size (and whether a model is a "small,
 # fast" or "larger, smarter" one) without querying anything extra.
@@ -583,7 +583,7 @@ _DEFAULT_MODEL_CAPABILITIES = {"context_window": 8192, "size_class": "unknown"}
 def get_model_capabilities(model, config=None):
     """
     Return a {"context_window": int, "size_class": str} hint for
-    `model`, used only for logging / lightweight prompt tuning — not
+    `model`, used only for logging / lightweight prompt tuning, not
     a claim about the model's real capabilities.
 
     Lookup order: an explicit `ollama_context_window` override in
@@ -610,7 +610,7 @@ def get_model_capabilities(model, config=None):
 def list_ollama_models(timeout_seconds=5):
     """
     Return the list of model names currently available in the local
-    Ollama installation — the same information `ollama list` shows —
+    Ollama installation, the same information `ollama list` shows,
     by calling Ollama's REST API GET /api/tags.
 
     Returns [] (never raises) on any failure: Ollama not running,
@@ -639,7 +639,7 @@ def is_model_available(model, timeout_seconds=5):
     Check whether `model` is already pulled locally.
 
     Ollama tags an untagged name to ":latest" internally, so
-    "llama3.2" and "llama3.2:latest" refer to the same local model —
+    "llama3.2" and "llama3.2:latest" refer to the same local model,
     we treat those as equivalent instead of requiring an exact string
     match, which would otherwise report a false "not available" for
     the (very common) case of a config value with no explicit tag.
@@ -660,8 +660,8 @@ def pull_model(model, timeout_seconds=1800):
     (POST /api/pull).
 
     This can take anywhere from a few seconds to many minutes
-    depending on the model's size and the connection speed — larger
-    models are several GB — so we print clear before/after feedback
+    depending on the model's size and the connection speed, larger
+    models are several GB, so we print clear before/after feedback
     rather than blocking silently. The request itself blocks until
     the pull finishes (stream: False) since we have no caller today
     that needs incremental progress; `timeout_seconds` defaults to
@@ -670,7 +670,7 @@ def pull_model(model, timeout_seconds=1800):
     Returns True on success, False on any failure (bad status,
     reported error, network problem, timeout).
     """
-    print(f"  [ai] Model '{model}' not found locally — pulling it now.")
+    print(f"  [ai] Model '{model}' not found locally, pulling it now.")
     print("  [ai] This can take several minutes for larger models. "
           "Please be patient...")
     try:
@@ -708,7 +708,7 @@ def ensure_model_available(model, timeout_seconds=5, pull_timeout_seconds=1800):
     return pull_model(model, timeout_seconds=pull_timeout_seconds)
 
 
-# ── process_with_ollama() — Offline: uses Ollama + Llama on your PC ──
+# ── process_with_ollama(), Offline: uses Ollama + Llama on your PC ──
 # Ollama is a FREE program that runs AI models locally on your
 # computer. It exposes an HTTP API at http://localhost:11434.
 #
@@ -716,11 +716,11 @@ def ensure_model_available(model, timeout_seconds=5, pull_timeout_seconds=1800):
 #   1. Download Ollama from: https://ollama.ai
 #   2. Install it (it's a normal app installer)
 #   3. Open Terminal and run: ollama pull llama3.2
-#      (this downloads a ~2GB model — takes a few minutes)
+#      (this downloads a ~2GB model, takes a few minutes)
 #   4. That's it! The model runs on your computer, 100% free.
 #
 # The code below calls Ollama's API the same way it calls Claude's
-# API — just a different URL and JSON format.
+# API, just a different URL and JSON format.
 def process_with_ollama(user_text, config, conversation_history=None):
     """
     Send the conversation to a locally-running Ollama server and
@@ -745,7 +745,7 @@ def process_with_ollama(user_text, config, conversation_history=None):
             # second time.
             if not pull_model(model):
                 print(f"  [ai] Could not make model '{model}' available "
-                      "— giving up on this offline request.")
+                      ",giving up on this offline request.")
                 return None
         else:
             print(f"  [ai] Configured Ollama model '{model}' isn't "
@@ -753,7 +753,7 @@ def process_with_ollama(user_text, config, conversation_history=None):
             print(f"  [ai]   Run: ollama pull {model}")
             print("  [ai]   (or set ollama_auto_pull: true in config.yaml "
                   "to pull it automatically next time)")
-            # Fall through and try anyway — Ollama may still know how
+            # Fall through and try anyway, Ollama may still know how
             # to resolve the name (e.g. a registry alias), and if not
             # it'll fail with a clear error from the API itself below.
 
@@ -773,12 +773,12 @@ def process_with_ollama(user_text, config, conversation_history=None):
                 "system": get_system_prompt(),
                 "stream": False,  # Wait for the full response instead
                                   # of Ollama streaming it back one
-                                  # word at a time — simpler for us
+                                  # word at a time, simpler for us
                                   # to handle since we just need the
                                   # complete text before parsing it.
                 "temperature": 0.7,
                 # Limit response length to prevent the AI from
-                # rambling (num_predict counts in "tokens" — small
+                # rambling (num_predict counts in "tokens", small
                 # chunks of text roughly 3/4 of a word each, so 512
                 # tokens is roughly 380 words).
                 "options": {
@@ -818,7 +818,7 @@ def _is_ollama_running(timeout_seconds=2):
     Check whether a local Ollama server is reachable.
 
     We do this by trying to connect to its API health-check
-    endpoint. `urllib.request` is Python's built-in HTTP client — we
+    endpoint. `urllib.request` is Python's built-in HTTP client, we
     use it here instead of `requests` because this check needs to
     run even if `requests` isn't installed yet (it's only imported,
     inside a try/except, further down for the real API call).
@@ -830,7 +830,7 @@ def _is_ollama_running(timeout_seconds=2):
         )
         return True
     except Exception:
-        # Any failure here — connection refused, DNS error, timeout —
+        # Any failure here, connection refused, DNS error, timeout,
         # means Ollama isn't running, and the exact reason doesn't
         # matter to the caller, so we collapse it all to False.
         return False
@@ -861,22 +861,22 @@ def _build_ollama_prompt(user_text, conversation_history):
 
     Unlike Claude's API (which takes a structured list of separate
     messages), Ollama's generate endpoint just wants one long block
-    of text, formatted like a script — "User: ...", "Assistant:
-    ...", back and forth — that the model continues from.
+    of text, formatted like a script, "User: ...", "Assistant:
+    ...", back and forth, that the model continues from.
     """
     conversation_text = ""
     if conversation_history:
         for msg in conversation_history:
             role = msg["role"].capitalize()  # "User" or "Assistant"
             conversation_text += f"{role}: {msg['content']}\n\n"
-    # End the prompt with "Assistant:" and nothing after it — this is
+    # End the prompt with "Assistant:" and nothing after it, this is
     # the model's cue that it should continue the text FROM this
     # point, i.e. write the assistant's reply next.
     conversation_text += f"User: {user_text}\n\nAssistant:"
     return conversation_text
 
 
-# ── _parse_response() — Extracts spoken text + actions ───────────
+# ── _parse_response(), Extracts spoken text + actions ───────────
 # Shared by both online and offline modes.
 #
 # The system prompt (see _JSON_FORMAT_ADDENDUM above) instructs the
@@ -884,19 +884,19 @@ def _build_ollama_prompt(user_text, conversation_history):
 #   {"response": "<spoken text>",
 #    "actions": [{"action": "open_app", "params": {"name": "Safari"}}]}
 #
-# We parse that with json.loads() — no hand-rolled pattern matching,
+# We parse that with json.loads(), no hand-rolled pattern matching,
 # no ambiguity about where one field ends and the next begins. This
 # also structurally fixes the whole CLASS of bug the old regex parser
 # had (see git history: the first action in a list could be silently
 # dropped because of an off-by-one in the "- action:" splitting
-# regex) — a JSON array has no such "first item is different from the
+# regex), a JSON array has no such "first item is different from the
 # rest" edge case to get wrong.
 #
 # _parse_response_legacy() below is kept ONLY as a fallback for the
 # rare case a model ignores the JSON instruction and replies in the
 # old "RESPONSE: ... ACTIONS: ..." text shape anyway (this can happen
 # with small/local Ollama models that don't follow instructions as
-# reliably as Claude does) — better to still get a usable reply than
+# reliably as Claude does), better to still get a usable reply than
 # to return nothing.
 def _parse_response(full_text):
     """
@@ -910,7 +910,7 @@ def _parse_response(full_text):
     parsed = _parse_response_json(full_text)
     if parsed is not None:
         return parsed
-    print("  [ai] Reply wasn't valid JSON — falling back to legacy "
+    print("  [ai] Reply wasn't valid JSON, falling back to legacy "
           "RESPONSE:/ACTIONS: text parser.")
     return _parse_response_legacy(full_text)
 
@@ -921,7 +921,7 @@ def _strip_markdown_code_fence(text):
     present, so json.loads() can parse the content inside it.
 
     Some models wrap JSON output in a markdown fence out of habit
-    even when told not to — this is a cheap, safe thing to tolerate
+    even when told not to, this is a cheap, safe thing to tolerate
     before giving up and falling back to the legacy parser.
     """
     text = text.strip()
@@ -965,7 +965,7 @@ def _parse_response_json(full_text):
     if isinstance(raw_actions, list):
         for entry in raw_actions:
             # Skip any array entry that isn't itself an object, or
-            # has no "action" name — malformed individual actions
+            # has no "action" name, malformed individual actions
             # shouldn't take down the whole response.
             if not isinstance(entry, dict):
                 continue
@@ -980,8 +980,8 @@ def _parse_response_json(full_text):
     return {"spoken_text": spoken_text.strip(), "actions": actions}
 
 
-# ── _parse_response_legacy() — old YAML-like text format ─────────
-# Kept only as a fallback — see _parse_response()'s docstring above.
+# ── _parse_response_legacy(), old YAML-like text format ─────────
+# Kept only as a fallback, see _parse_response()'s docstring above.
 def _parse_response_legacy(full_text):
     """
     Split the AI's raw reply into the spoken-aloud text and the list
@@ -993,11 +993,11 @@ def _parse_response_legacy(full_text):
     actions = []
 
     # This pattern reads as: starting right after "RESPONSE:" (and
-    # any following whitespace), capture everything — `.+?` — up
+    # any following whitespace), capture everything, `.+?`, up
     # until either the literal text "ACTIONS:" on its own line, or
     # the end of the string (`\Z`). The `?` after `.+` makes the
     # match "non-greedy," meaning it grabs as LITTLE text as possible
-    # while still satisfying the pattern — without it, `.+` would
+    # while still satisfying the pattern, without it, `.+` would
     # greedily swallow the entire rest of the string, including the
     # ACTIONS section, before backtracking. `re.DOTALL` makes `.`
     # match newline characters too, since the response text can span
@@ -1033,10 +1033,10 @@ def _parse_actions_legacy(actions_text):
     """
     actions = []
     # Split the whole ACTIONS block wherever a new "- action:" line
-    # begins. `(?:\A|\n)` — "the very start of the string, OR a
-    # newline" — makes sure the very FIRST "- action:" splits off
+    # begins. `(?:\A|\n)`, "the very start of the string, OR a
+    # newline", makes sure the very FIRST "- action:" splits off
     # too, not just later ones (a bug that used to silently drop the
-    # first action of every response — see git history).
+    # first action of every response, see git history).
     action_blocks = re.split(r"(?:\A|\n)\s*-\s+action:", actions_text)
 
     for block in action_blocks:
