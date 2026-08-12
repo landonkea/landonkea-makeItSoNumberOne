@@ -560,7 +560,11 @@ class ClaudeService {
     // only this class can use it, other code doesn't need to know
     // about this internal parsing logic. It takes the full text string
     // and returns just the spoken portion.
-    private func extractSpokenText(from fullText: String) -> String {
+    // Not marked `private`, Swift's `private` is file-scoped and even
+    // `@testable import` can't reach it from ClaudeServiceParsingTests.swift in
+    // the Tests target. Default (internal) access lets that test file call it
+    // directly, the same reasoning as SettingsStore.resolveKey() above.
+    func extractSpokenText(from fullText: String) -> String {
         // Search for the "RESPONSE:" marker in the text. `.range(of:)`
         // finds where the word "RESPONSE:" appears in the string. If
         // it finds it, we get a range (start and end positions). If
@@ -599,7 +603,9 @@ class ClaudeService {
     // actions from the AI's full structured response. It returns an
     // array of ClaudeAction objects. If no actions are found, it
     // returns an empty array instead of nil.
-    private func extractActions(from fullText: String) -> [ClaudeAction] {
+    // Default (internal) access, not `private`, see the comment on
+    // extractSpokenText(from:) above for why.
+    func extractActions(from fullText: String) -> [ClaudeAction] {
         // Create an empty array that will hold any actions we find.
         // We'll add to this as we parse the response text.
         var actions: [ClaudeAction] = []

@@ -394,7 +394,11 @@ object ClaudeService {
     // string rather than a structured list of role-tagged messages, so earlier turns have to be
     // flattened into that same "User: ...\n\nAssistant: ..." script format before the new
     // utterance, mirroring desktop/core/ai.py's _build_ollama_prompt().
-    private fun buildOllamaPrompt(userText: String, conversationHistory: List<ConversationTurn>): String {
+    // "internal" (rather than "private") so tests in this module can call it directly, the
+    // same reasoning as SettingsRepository.resolveKey(): this is pure text-shaping logic with
+    // no Android/network dependency, so it's worth exercising on its own instead of only ever
+    // indirectly through a full processWithOllama() network call.
+    internal fun buildOllamaPrompt(userText: String, conversationHistory: List<ConversationTurn>): String {
         val builder = StringBuilder()
         for (turn in conversationHistory) {
             // Capitalize "user"/"assistant" into "User"/"Assistant" to match the script format.
@@ -451,7 +455,9 @@ object ClaudeService {
     // ── Extract the spoken response from the assistant's format ─
     // This function searches for "RESPONSE:" in the output and grabs whatever text follows it.
     // It works identically whether the text came from Claude or Ollama (same prompt → same format).
-    private fun extractSpokenText(fullText: String): String {
+    // "internal" so tests can exercise this parsing directly, see the comment on
+    // buildOllamaPrompt() above for why.
+    internal fun extractSpokenText(fullText: String): String {
         // Define a regular expression (pattern) that finds "RESPONSE:" followed by any text,
         // stopping when it hits "ACTIONS:" on a new line or the end of the string.
         // DOT_MATCHES_ALL lets the dot (.) match newline characters too.
@@ -470,7 +476,9 @@ object ClaudeService {
     // Its ONLY job is: find the ACTIONS section, split it into per-action chunks of text ("blocks"),
     // and hand each block to parseActionBlock() to turn into an Action object. The actual line-by-line
     // parsing logic lives in parseActionBlock so this function stays focused on the splitting step.
-    private fun extractActions(fullText: String): List<Action> {
+    // "internal" so tests can exercise this parsing directly, see the comment on
+    // buildOllamaPrompt() above for why.
+    internal fun extractActions(fullText: String): List<Action> {
         // Create an empty mutable list that we'll fill with Action objects as we parse them.
         val actions = mutableListOf<Action>()
         // Define a regex that finds "ACTIONS:" and then captures everything that follows it.
@@ -482,9 +490,17 @@ object ClaudeService {
         if (match != null) {
             // Extract the captured text (everything after "ACTIONS:") and trim surrounding whitespace.
             val actionsText = match.groupValues[1].trim()
-            // Split the actions text into individual action blocks by looking for lines starting with "- action:".
-            val blocks = actionsText.split("\n\\s*-\\s+action:".toRegex())
-            // Loop through each block, skipping the first one (which is text before any "- action:").
+            // Split the actions text into individual action blocks by looking for lines starting
+            // with "- action:". A bare split() here would silently swallow the FIRST action: the
+            // real text always starts immediately with "- action:" (no blank preamble line before
+            // it), so the delimiter regex, which requires a "\n" before the "-", never matches at
+            // the very start of the string, and the first action's whole block ends up stuck in
+            // blocks[0] instead of being split out on its own. Prepending a throwaway leading
+            // newline gives that first "- action:" something to match against too, so it's
+            // stripped out just like every later one, and blocks[0] becomes the empty string we
+            // actually meant to drop below.
+            val blocks = ("\n" + actionsText).split("\n\\s*-\\s+action:".toRegex())
+            // Loop through each block, skipping the first one (empty, the sentinel prefix added above).
             // mapNotNull runs parseActionBlock on every block and keeps only the non-null results,
             // so a malformed block (no action type) is silently dropped instead of crashing.
             actions.addAll(blocks.drop(1).mapNotNull { block -> parseActionBlock(block) })

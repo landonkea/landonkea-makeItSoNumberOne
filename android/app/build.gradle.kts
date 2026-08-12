@@ -107,8 +107,11 @@ dependencies {
     // with the "llama3.2" model pulled. This is all handled at runtime
     // by ClaudeService.processWithOllama() using standard HTTP calls.
     //
-    // Future: if we want to bundle an embedded LLM, we'd add a
-    // dependency like `org.pytorch:pytorch_android:2.1.0` here.
+    // ── On-device LLM (MediaPipe GenAI) ─────────────────────────
+    // Backs LocalModelService.kt's LlmInference usage. This was missing
+    // before, LocalModelService.kt imported com.google.mediapipe classes
+    // with no matching dependency declared, breaking the Android build.
+    implementation("com.google.mediapipe:tasks-genai:0.10.27")
 
     // ── Unit tests (JVM, no Android device/emulator needed) ───
     // Backs SettingsRepositoryTest.kt — EncryptedSharedPreferences itself

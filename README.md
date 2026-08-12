@@ -277,18 +277,45 @@ opening Xcode.
 
 ## Tests / verification
 
-- **Desktop**: `desktop/tests/` has an automated `unittest` suite, no pytest needed, covering
-  the `run_command`/`read_file` security gates and the plugin system (`test_plugins.py`,
-  discovery, malformed-plugin handling, built-in actions dispatched through the plugin
-  registry). Run with
-  `cd desktop && python3 -m unittest discover -s tests -v`. There's no test suite yet for the
-  rest of the app, wake word, audio, AI calls all need real hardware/API access, but
-  `python3 -m py_compile make_it_so.py core/*.py core/actions/*.py build_pyinstaller.py` passes, no syntax errors.
-- **Android**: `./gradlew compileDebugKotlin` and `compileReleaseKotlin` pass. A full
-  `assembleDebug`/`assembleRelease` needs a JDK 17 toolchain, this project targets Java 17;
-  it isn't buildable end-to-end with a newer JDK.
-- **iOS**: `xcodebuild -scheme MakeItSo -sdk iphonesimulator -configuration Debug build` full
-  simulator build succeeds.
+- **Desktop**: `desktop/tests/` has an automated `unittest` suite (252 tests) covering the
+  `run_command`/`read_file` security gates, the plugin system (`test_plugins.py`, discovery,
+  malformed-plugin handling, built-in actions dispatched through the plugin registry), AI
+  response parsing and the Ollama offline fallback, and, as of this pass, the three areas that
+  used to only get a `py_compile` check: wake-word detection (`test_wake_word.py`, mocking
+  Porcupine and the mic stream so the frame-read loop, missing-library handling, and cleanup-
+  on-Ctrl+C all run without real hardware), the audio pipeline (`test_audio.py`, chime WAV
+  generation, RMS loudness math, the record-until-silence state machine, and each platform's
+  playback command, all against faked I/O), and the live Claude API call
+  (`test_claude_api.py`, mocking `requests` the same way `test_ollama.py` already did, covering
+  both the plain and the streaming SSE path, including a connection that drops mid-stream).
+  Run with `cd desktop && .venv/bin/python3 -m unittest discover -s tests -v` (use the
+  project's venv, not a bare system `python3`, or the `requests`-dependent integration tests
+  will fail with `ModuleNotFoundError`). All 252 pass.
+- **Android**: `android/app/src/test/` now has two JVM unit test files: the original
+  `SettingsRepositoryTest.kt` and a new `ClaudeServiceParsingTest.kt`, covering
+  `ClaudeService`'s RESPONSE:/ACTIONS: text parser and its Ollama prompt-builder (three
+  functions changed from `private` to `internal` so tests can reach them, same pattern as
+  `SettingsRepository.resolveKey()`). Writing these tests surfaced a real bug: the
+  action-block splitter was silently dropping the first action of every AI reply (and *all*
+  actions on a single-action reply), the same class of bug the desktop client had before it
+  switched to JSON parsing, just never fixed on Android. That's fixed now (see
+  `extractActions()` in `ClaudeService.kt`). Neither this nor `SettingsRepositoryTest.kt` could
+  be run to completion in every environment: `./gradlew compileDebugKotlin` currently fails
+  even on a clean checkout, unrelated to this change, `LocalModelService.kt` references
+  MediaPipe LLM Inference classes (`LlmInference`, etc.) that aren't declared as a dependency
+  in `app/build.gradle.kts`, so the whole `app` module fails to compile until that's added.
+  The new test's expected output was hand-verified against the actual parsing logic instead
+  (traced by hand and cross-checked against an equivalent Python re-implementation).
+- **iOS**: `ios/MakeItSo/Tests/MakeItSoTests/` now has two files: the original
+  `SettingsStoreTests.swift` and a new `ClaudeServiceParsingTests.swift`, covering
+  `ClaudeService`'s `extractSpokenText(from:)`/`extractActions(from:)` (changed from `private`
+  to internal for the same reason as Android's). Unlike Android's version, Swift's
+  `components(separatedBy:)`-based splitter was never susceptible to the first-action-dropped
+  bug (a literal substring split matches at position 0; Android's regex split required a
+  preceding newline that isn't there), which one of the new tests confirms directly. Run with
+  `cd ios/MakeItSo && swift test`, 19 tests, all pass. Separately,
+  `xcodebuild -scheme MakeItSo -sdk iphonesimulator -configuration Debug build` (the actual
+  Xcode project, which has no test target of its own) still builds.
 
 None of the three apps can be *run* in a headless environment, they all need a real
 microphone, speakers, and, for Android/iOS, a device or simulator.
@@ -305,12 +332,16 @@ scripts/run_all_tests.sh          # all 3 platforms → test-results/latest.md
 scripts/run_all_tests.sh desktop  # just one platform → test-results/latest-<platform>.md
 ```
 
-Android and iOS don't have real unit test targets yet, see above, compile/build checks
-only, so their sections currently report "no tests found" / "no test target configured"
-rather than a pass/fail count; the script is written to handle that gracefully instead of
-failing the whole run. Raw command output for each platform is kept alongside the report
-in `test-results/raw/`. CI runs the same script per job and uploads each platform's report
-as a build artifact, see `.github/workflows/ci.yml`.
+Android now has real JUnit tests (see above), but `./gradlew testDebugUnitTest` still can't
+finish here because the `app` module itself fails to compile for an unrelated reason
+(`LocalModelService.kt`'s missing MediaPipe dependency, see above), so this script's Android
+section currently reports that compile failure rather than a pass/fail count. iOS's real
+tests live in the separate `swift test` package (see above), not behind the Xcode scheme this
+script drives with `xcodebuild test`, so its section still reports "no test target
+configured" for that specific command. The script is written to handle both gracefully
+instead of failing the whole run. Raw command output for each platform is kept alongside the
+report in `test-results/raw/`. CI runs the same script per job and uploads each platform's
+report as a build artifact, see `.github/workflows/ci.yml`.
 
 ## Secrets
 
