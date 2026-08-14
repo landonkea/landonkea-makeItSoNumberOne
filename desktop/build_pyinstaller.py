@@ -45,11 +45,23 @@ import shutil
 # but done programmatically.
 import subprocess
 
+# Import `argparse` to read the optional `--channel` flag from the
+# command line, the same debug/beta/release split Android's build
+# types and iOS's Beta/Release configs use, see
+# .github/workflows/build-channels.yml.
+import argparse
+
+
+# Which CI build channel this run is for. "release" (the default) is
+# what a plain `python build_pyinstaller.py` with no flags still
+# produces, so nothing changes for anyone running this by hand.
+CHANNELS = ("debug", "beta", "release")
+
 
 # Define a function named `build` that handles the entire PyInstaller
 # build process. Functions are reusable blocks of code that you can
 # "call" (run) whenever you need that behavior.
-def build():
+def build(channel="release"):
     """
     Build the standalone executable using PyInstaller.
 
@@ -61,7 +73,19 @@ def build():
        --onefile) that contains the app + Python runtime + all
        dependencies.
     3. The result is a portable executable, NO install needed.
+
+    `channel` picks which CI build channel this is (debug/beta/
+    release, see CHANNELS above). It changes two things: the output
+    binary's name (MakeItSo-debug / MakeItSo-beta / MakeItSo) so all
+    three can sit in the same dist/ folder without overwriting each
+    other, and, on macOS, whether a terminal window stays attached
+    (debug keeps it, for reading stack traces without digging through
+    log files; beta/release use --windowed like before).
     """
+    if channel not in CHANNELS:
+        print(f"  [build] Unknown channel '{channel}', expected one of {CHANNELS}")
+        sys.exit(1)
+
     # ── Get the script's directory ───────────────────────────────
     # `os.path.abspath(__file__)` gets the full absolute path to this
     # script file (e.g., /Users/.../desktop/build_pyinstaller.py).
@@ -73,16 +97,16 @@ def build():
     _ensure_pyinstaller_installed()
 
     # Print a message saying the build has started.
-    print("  [build] Starting PyInstaller build...")
+    print(f"  [build] Starting PyInstaller build (channel: {channel})...")
     # Print the source directory so the user can verify we're building
     # from the right place.
     print(f"  [build] Source: {script_dir}")
 
     _clean_previous_build(script_dir)
 
-    cmd = _build_pyinstaller_command(script_dir)
+    cmd = _build_pyinstaller_command(script_dir, channel)
     _run_pyinstaller(cmd)
-    _print_success_message()
+    _print_success_message(channel)
 
 
 def _ensure_pyinstaller_installed():
@@ -144,19 +168,19 @@ def _clean_previous_build(script_dir):
             # inside it. "rmtree" = "remove tree" (a tree of files/folders).
             shutil.rmtree(path)
 
-    # ── Remove old .spec file ────────────────────────────────────
-    # Construct the path to the PyInstaller .spec file.
-    # The .spec file is a configuration file that PyInstaller generates
-    # during the build. We remove it to ensure a clean build.
-    spec_path = os.path.join(script_dir, "make_it_so.spec")
-    # Check if the .spec file exists from a previous build.
-    if os.path.exists(spec_path):
-        # Delete the old .spec file so it doesn't interfere with the
-        # new build. We want PyInstaller to generate a fresh one.
+    # ── Remove old .spec file(s) ─────────────────────────────────
+    # PyInstaller names the generated .spec file after whatever
+    # --name it was given (MakeItSo.spec / MakeItSo-debug.spec /
+    # MakeItSo-beta.spec, one per channel), not after the entry
+    # script, so a glob catches every channel's leftover spec
+    # instead of a single hardcoded filename that would only ever
+    # match one of them.
+    import glob
+    for spec_path in glob.glob(os.path.join(script_dir, "*.spec")):
         os.remove(spec_path)
 
 
-def _build_pyinstaller_command(script_dir):
+def _build_pyinstaller_command(script_dir, channel="release"):
     """
     Assemble the full PyInstaller command-line invocation as a list
     of argument strings, ready to hand to subprocess.run().
@@ -194,6 +218,13 @@ def _build_pyinstaller_command(script_dir):
         "prompts"
     )
 
+    # Debug and beta builds get a suffixed output name (MakeItSo-debug,
+    # MakeItSo-beta) so a channel's binary never silently overwrites
+    # another channel's in dist/, the same reason Android's debug/beta
+    # build types get an applicationIdSuffix. Release keeps the plain
+    # "MakeItSo" name, unchanged from before channels existed.
+    output_name = "MakeItSo" if channel == "release" else f"MakeItSo-{channel}"
+
     # Start building the command as a list of strings.
     # Each element in the list is one "word" in the command.
     # We use a list instead of a string to avoid issues with spaces
@@ -201,7 +232,7 @@ def _build_pyinstaller_command(script_dir):
     cmd = [
         "pyinstaller",                                    # The tool to run.
         "--onefile",                                      # Single .exe/.app file.
-        "--name", "MakeItSo",                             # Name of the output.
+        "--name", output_name,                            # Name of the output.
         "--distpath", os.path.join(script_dir, "dist"),   # Output folder.
         "--workpath", os.path.join(script_dir, "build"),  # Temp build folder.
         "--specpath", script_dir,                          # .spec file location.
@@ -236,10 +267,13 @@ def _build_pyinstaller_command(script_dir):
     import platform
     # Check if the operating system is macOS.
     # `platform.system()` returns "Darwin" for macOS.
-    if platform.system() == "Darwin":
+    if platform.system() == "Darwin" and channel != "debug":
         # Add --windowed flag so the app runs without a terminal window.
         # This makes it behave like a normal Mac app (you can double-click
-        # it from Finder without a terminal popping up).
+        # it from Finder without a terminal popping up). Debug builds skip
+        # this on purpose, an attached terminal is exactly where you'd
+        # want stack traces and print-debugging output to land while
+        # chasing down a bug in a dev-branch build.
         cmd.append("--windowed")
         # Add the --icon flag to set the app's icon, but only if an
         # icon file actually exists. PyInstaller errors out (and the
@@ -293,7 +327,7 @@ def _run_pyinstaller(cmd):
         sys.exit(1)
 
 
-def _print_success_message():
+def _print_success_message(channel="release"):
     """Print the final "build complete" box with the output path."""
     # ── Done ────────────────────────────────────────────────────
     # Import here (rather than at the top of the file) since this is
@@ -301,6 +335,17 @@ def _print_success_message():
     # needs to know the current OS, and importing right where it's
     # used keeps that dependency visible locally.
     import platform
+
+    output_name = "MakeItSo" if channel == "release" else f"MakeItSo-{channel}"
+    if platform.system() == "Darwin" and channel != "debug":
+        # --windowed (skipped for debug, see _build_pyinstaller_command)
+        # is what makes PyInstaller wrap the output in a .app bundle on
+        # macOS; without it you get a plain Unix binary, same as Linux.
+        output_path = f"desktop/dist/{output_name}.app"
+    elif platform.system() == "Windows":
+        output_path = f"desktop/dist/{output_name}.exe"
+    else:
+        output_path = f"desktop/dist/{output_name}"
 
     # Print a blank line for spacing.
     print()
@@ -310,23 +355,15 @@ def _print_success_message():
     print("  ║  ✅  BUILD COMPLETE!                           ║")
     # Print a separator line.
     print("  ║                                                ║")
-    # Check the platform again to show the correct output path format.
-    print("  ║  Your app is at:                                ║")
-    if platform.system() == "Darwin":
-        # macOS: the output is a .app bundle.
-        print("  ║  desktop/dist/MakeItSo.app              ║")
-    elif platform.system() == "Windows":
-        # Windows: the output is a .exe file.
-        print("  ║  desktop/dist/MakeItSo.exe              ║")
-    else:
-        # Linux: the output is an executable binary with no extension.
-        print("  ║  desktop/dist/MakeItSo                  ║")
-    # Print a separator line.
-    print("  ║                                                ║")
     # Print a note that the app is portable (no Python needed).
     print("  ║  Share this with anyone, no Python needed!    ║")
     # Print the bottom border of the success box.
     print("  ╚══════════════════════════════════════════════════╝")
+    # The output filename varies by channel and by platform, so it's
+    # printed as a plain line below the fixed-width box instead of
+    # forcing it to fit inside the box's hardcoded padding.
+    print(f"  [build] Channel: {channel}")
+    print(f"  [build] Your app is at: {output_path}")
     # Print a blank line at the end for clean formatting.
     print()
 
@@ -335,6 +372,19 @@ def _print_success_message():
 # (not when imported). `__name__` is set to "__main__" when the script
 # is run with `python build_pyinstaller.py`.
 if __name__ == "__main__":
+    # `--channel` is optional and defaults to "release", so this
+    # script behaves exactly as it did before channels existed for
+    # anyone running `python build_pyinstaller.py` by hand. CI passes
+    # it explicitly per job, see .github/workflows/build-channels.yml.
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--channel",
+        choices=CHANNELS,
+        default="release",
+        help="Which build channel to produce (default: release).",
+    )
+    args = parser.parse_args()
+
     # Call the build() function to start the PyInstaller build process.
     # This is the entry point that kicks everything off.
-    build()
+    build(channel=args.channel)
