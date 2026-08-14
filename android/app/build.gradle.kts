@@ -54,6 +54,22 @@ android {
             applicationIdSuffix = ".debug"
             isMinifyEnabled = false
         }
+        // ── Beta (staging) ──────────────────────────────────────
+        // Sits between debug and release: shrunk/obfuscated like a
+        // real release build (so testers see the same R8-processed
+        // code path production will run), but with its own
+        // applicationId/versionName suffix so it installs next to
+        // both debug and release instead of colliding with either.
+        // Used by the pre-release-tag CI channel in
+        // .github/workflows/build-channels.yml — no separate
+        // signingConfig here for the same reason release has none,
+        // see the NOTE above.
+        create("beta") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".beta"
+            versionNameSuffix = "-beta"
+            matchingFallbacks += listOf("release")
+        }
     }
 
     compileOptions {

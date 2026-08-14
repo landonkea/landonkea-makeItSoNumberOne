@@ -12,6 +12,20 @@ options:
   deploymentTarget:
     iOS: "17.0"
 
+# "configs:" declares the build configurations available to targets
+# and schemes. xcodegen's default (an implicit Debug/Release pair)
+# only covers two of the three CI build channels this repo now has
+# (.github/workflows/build-channels.yml), so "Beta" is added here as
+# a third, release-optimized configuration distinct from "Release"
+# only in the per-config settings below (bundle ID suffix). Debug
+# stays a real "debug" type config (no optimization, assertions on);
+# Beta and Release are both "release" type (optimized) so a beta
+# tester sees the same compiler output production will ship.
+configs:
+  Debug: debug
+  Beta: release
+  Release: release
+
 # "packages:" declares remote Swift Package dependencies.
 packages:
   # Porcupine is Picovoice's on-device wake word engine.
@@ -66,6 +80,18 @@ targets:
         ONLY_ACTIVE_ARCH: YES
         # Enable testability only for debug builds.
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+      # Per-config overrides, same channel convention Android's
+      # applicationIdSuffix uses: Debug/Beta get a suffixed bundle ID
+      # so all three channels could install side by side on one
+      # device once each is actually signed; Release keeps the bare
+      # identifier.
+      configs:
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: com.landonkea.MakeItSo.debug
+        Beta:
+          PRODUCT_BUNDLE_IDENTIFIER: com.landonkea.MakeItSo.beta
+        Release:
+          PRODUCT_BUNDLE_IDENTIFIER: com.landonkea.MakeItSo
     # "dependencies:" lists frameworks/libraries the app links against.
     dependencies:
       # Porcupine — the on-device wake word engine ("Computer").
