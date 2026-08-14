@@ -343,6 +343,33 @@ instead of failing the whole run. Raw command output for each platform is kept a
 report in `test-results/raw/`. CI runs the same script per job and uploads each platform's
 report as a build artifact, see `.github/workflows/ci.yml`.
 
+### CI build channels
+
+This is a mobile/desktop app, not a hosted service, so there's no server to point a
+dev/staging/prod environment at. The equivalent here is which build gets produced:
+`.github/workflows/build-channels.yml` watches for three specific pushes and builds
+accordingly.
+
+| Trigger | Channel | Android | Desktop | iOS |
+|---|---|---|---|---|
+| push to `dev` | debug | `assembleDebug` (`.debug` app ID suffix) | PyInstaller, console attached, `MakeItSo-debug` | simulator build, zipped |
+| tag with a `-` (`v1.3.0-beta.1`, `v1.3.0-rc1`) | beta | `assembleBeta` (`.beta` app ID suffix) | PyInstaller, `MakeItSo-beta` | unsigned device archive, zipped |
+| plain version tag (`v1.3.0`) | release | `assembleRelease` (unsigned) | PyInstaller, `MakeItSo` | unsigned device archive, zipped |
+
+Desktop builds on all three OSes in that job (Linux/macOS/Windows) since PyInstaller bundles a
+real interpreter and native deps into one platform-specific binary, there's no such thing as a
+cross-platform PyInstaller output. Android's `beta` build type
+(`android/app/build.gradle.kts`) mirrors `release`, R8-shrunk, same as what a real release
+build runs, just with its own app ID/version suffix so it installs next to debug and release
+instead of overwriting either. iOS's `Beta` configuration (`ios/MakeItSo/project.yml`) works
+the same way against Xcode's build settings.
+
+Every artifact this workflow produces is unsigned, on purpose, there's no Apple Developer
+certificate or Android keystore in this repo (see "Secrets" below, and BUILD_LOG.md section 3,
+"What 'zero manual input' doesn't cover"). A human downloads the artifact from the Actions run
+and signs it locally before it goes on a real device or into a store; this workflow's job ends
+at "here's a build," not "here's a release."
+
 ## Secrets
 
 No API keys, tokens, or credential files are committed anywhere in this repo. Desktop reads
