@@ -21,6 +21,20 @@
                ReferencedContainer = "container:MakeItSo.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "4C43ADF37CA5F635D786DC34"
+               BuildableName = "MakeItSoTests.xctest"
+               BlueprintName = "MakeItSoTests"
+               ReferencedContainer = "container:MakeItSo.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -39,7 +53,20 @@
          </BuildableReference>
       </MacroExpansion>
       <Testables>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "4C43ADF37CA5F635D786DC34"
+               BuildableName = "MakeItSoTests.xctest"
+               BlueprintName = "MakeItSoTests"
+               ReferencedContainer = "container:MakeItSo.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
+      <CommandLineArguments>
+      </CommandLineArguments>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"

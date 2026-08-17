@@ -19,14 +19,28 @@
 		92A0468D165B08D3419681EF /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C895C0E77DF552F8FB8EE59A /* ContentView.swift */; };
 		9F8752B2D2532FC3581DCBD2 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DD1CC519E7FC6F8612F8049E /* AVFoundation.framework */; };
 		9FA74EF181A32813CAEC4B5D /* Porcupine in Frameworks */ = {isa = PBXBuildFile; productRef = D54F90A137459062694D3A2A /* Porcupine */; };
+		AC4E1AFDDB6D50133E76D5FD /* SettingsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BE474A94847F4B2E0443336 /* SettingsStoreTests.swift */; };
 		DDCCE393E3F1AAC73A1644E5 /* computer_chime.wav in Resources */ = {isa = PBXBuildFile; fileRef = 6C58B150F5F9B6777EA3C3DD /* computer_chime.wav */; };
+		E336C7B0B9DC99F6A899809C /* ClaudeServiceParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F541E13DBE013014B841394D /* ClaudeServiceParsingTests.swift */; };
 		EFE358F48B90BF2159A3BEDC /* WakeWordService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5412F9C702568241FB93D64 /* WakeWordService.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		3C1AB8A4F282E37B61015068 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 442CBDF8830FCAC5CC8EAD87 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 9A185EA0B3A970275D3CB4F1;
+			remoteInfo = MakeItSo;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		008B6F9C8D2A57D7CC1BBF98 /* MakeItSoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MakeItSoApp.swift; sourceTree = "<group>"; };
 		05526A64958956C9E98BC427 /* system_prompt.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = system_prompt.txt; sourceTree = "<group>"; };
+		203A7E945E7F4800132CA60A /* MakeItSoTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MakeItSoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2566E2C4EE49B86834713527 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		3BE474A94847F4B2E0443336 /* SettingsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStoreTests.swift; sourceTree = "<group>"; };
 		426A127FEAA27C6C6CB109C7 /* ActionRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionRouter.swift; sourceTree = "<group>"; };
 		61E9E9CD8D5CBF671178894E /* SpeechManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechManager.swift; sourceTree = "<group>"; };
 		6803171B6A2960D357D15AE8 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -39,6 +53,7 @@
 		C895C0E77DF552F8FB8EE59A /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		DD1CC519E7FC6F8612F8049E /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		EE343FCABAEB8AE430975B16 /* Speech.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Speech.framework; path = System/Library/Frameworks/Speech.framework; sourceTree = SDKROOT; };
+		F541E13DBE013014B841394D /* ClaudeServiceParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeServiceParsingTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -77,6 +92,7 @@
 				61E9E9CD8D5CBF671178894E /* SpeechManager.swift */,
 				84F9F8DEB8048D4453B4CD31 /* TTSService.swift */,
 				B5412F9C702568241FB93D64 /* WakeWordService.swift */,
+				B05BC68A7D795D487F10CE33 /* MakeItSoTests */,
 				4022D7E21B719D90D8A4A86C /* Resources */,
 				55B0266DDD0D22E097497B53 /* Frameworks */,
 				64E896D7141A77756D5059A5 /* Products */,
@@ -96,13 +112,42 @@
 			isa = PBXGroup;
 			children = (
 				BBA19B5F42EE9ED5546FB0F8 /* MakeItSo.app */,
+				203A7E945E7F4800132CA60A /* MakeItSoTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		B05BC68A7D795D487F10CE33 /* MakeItSoTests */ = {
+			isa = PBXGroup;
+			children = (
+				F541E13DBE013014B841394D /* ClaudeServiceParsingTests.swift */,
+				3BE474A94847F4B2E0443336 /* SettingsStoreTests.swift */,
+			);
+			name = MakeItSoTests;
+			path = Tests/MakeItSoTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		4C43ADF37CA5F635D786DC34 /* MakeItSoTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0F1A31293330E12B5AEB1077 /* Build configuration list for PBXNativeTarget "MakeItSoTests" */;
+			buildPhases = (
+				9CB3DF74D84EE51AC040BA01 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				2E31283FB88296FD3A9F7B4E /* PBXTargetDependency */,
+			);
+			name = MakeItSoTests;
+			packageProductDependencies = (
+			);
+			productName = MakeItSoTests;
+			productReference = 203A7E945E7F4800132CA60A /* MakeItSoTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		9A185EA0B3A970275D3CB4F1 /* MakeItSo */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = A79E9BDD6AAEA464DE0B54A5 /* Build configuration list for PBXNativeTarget "MakeItSo" */;
@@ -152,6 +197,7 @@
 			projectRoot = "";
 			targets = (
 				9A185EA0B3A970275D3CB4F1 /* MakeItSo */,
+				4C43ADF37CA5F635D786DC34 /* MakeItSoTests */,
 			);
 		};
 /* End PBXProject section */
@@ -169,6 +215,15 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		9CB3DF74D84EE51AC040BA01 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E336C7B0B9DC99F6A899809C /* ClaudeServiceParsingTests.swift in Sources */,
+				AC4E1AFDDB6D50133E76D5FD /* SettingsStoreTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		EAA8B41B007E956738946B1E /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -186,6 +241,14 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		2E31283FB88296FD3A9F7B4E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 9A185EA0B3A970275D3CB4F1 /* MakeItSo */;
+			targetProxy = 3C1AB8A4F282E37B61015068 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		04A483B343E0CBCB43BF3204 /* Release */ = {
@@ -243,6 +306,40 @@
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
+		};
+		0AF61C1E4F5C84F6155856F2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.landonkea.MakeItSo.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MakeItSo.app/MakeItSo";
+			};
+			name = Release;
+		};
+		23DCEC24E97660F38BEC9002 /* Beta */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.landonkea.MakeItSo.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MakeItSo.app/MakeItSo";
+			};
+			name = Beta;
 		};
 		33B43EF395ED6DAF5592305C /* Beta */ = {
 			isa = XCBuildConfiguration;
@@ -426,9 +523,36 @@
 			};
 			name = Debug;
 		};
+		E7BFFB27C6F8101E68E30917 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.landonkea.MakeItSo.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/MakeItSo.app/MakeItSo";
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		0F1A31293330E12B5AEB1077 /* Build configuration list for PBXNativeTarget "MakeItSoTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				23DCEC24E97660F38BEC9002 /* Beta */,
+				E7BFFB27C6F8101E68E30917 /* Debug */,
+				0AF61C1E4F5C84F6155856F2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Beta;
+		};
 		281CCD9D53DDB5E27B7F5229 /* Build configuration list for PBXProject "MakeItSo" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

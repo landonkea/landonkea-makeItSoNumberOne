@@ -105,6 +105,37 @@ targets:
       # AVFoundation — audio recording + text-to-speech (AVAudioSession).
       - sdk: AVFoundation.framework
 
+  # "MakeItSoTests:" the unit test bundle. Tests/MakeItSoTests/
+  # (ClaudeServiceParsingTests.swift, SettingsStoreTests.swift) has
+  # existed since these tests were written, but with no target here
+  # to build it and no `test:` action on the scheme below to run it,
+  # `xcodebuild test` had nothing to do ("is not currently configured
+  # for the test action") and scripts/run_all_tests.sh's iOS section
+  # has been silently reporting SKIPPED ever since, not because the
+  # tests fail, but because they have never once actually run.
+  MakeItSoTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests/MakeItSoTests
+    settings:
+      base:
+        # Uses @testable import MakeItSo (see the test files' own
+        # header comments), so it must build against MakeItSo's
+        # actual bundle identifier, not a second, separate one.
+        PRODUCT_BUNDLE_IDENTIFIER: com.landonkea.MakeItSo.tests
+        # Unlike the MakeItSo app target, this bundle has no
+        # hand-written Info.plist of its own (Resources/Info.plist
+        # belongs to the app target only), so it needs one generated
+        # automatically or code signing fails outright.
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      # host_target: this bundle runs INSIDE the MakeItSo app process
+      # (required for @testable import to see MakeItSo's internal
+      # types), rather than as a freestanding test bundle.
+      - target: MakeItSo
+        embed: false
+
 # "schemes:" defines run/test schemes for Xcode's toolbar.
 schemes:
   # The scheme name shown in Xcode's scheme picker.
@@ -113,6 +144,14 @@ schemes:
     build:
       targets:
         MakeItSo: all
+        # "[test]" marks this target as test-only in this scheme, it
+        # builds for `xcodebuild test` but not for a plain `build`/`run`.
+        MakeItSoTests: [test]
+    # "test:" configures which target(s) `xcodebuild test` runs.
+    test:
+      config: Debug
+      targets:
+        - MakeItSoTests
     # "run:" configures how the app launches (on the simulator).
     run:
       config: Debug
