@@ -25,6 +25,15 @@ desktop/config.yaml
 # whatever the user has said to the assistant — never commit) ──
 desktop/conversation_history.json
 
+# ── Voice profiles (core/voice_id.py) — biometric-ish fingerprints
+# of enrolled household members' voices, never commit ──
+desktop/voice_profiles.json
+
+# ── Journal entries buffered locally when the MQTT broker itself is
+# unreachable (see plugins/examples/journal_entry_plugin.py) — may
+# contain real journal text waiting to be delivered, never commit ──
+desktop/journal_pending.jsonl
+
 # ── Routines (local user macros — may encode personal habits/
 # routines like "unlock the door" — never commit; ship the
 # .example.yaml template instead) ──

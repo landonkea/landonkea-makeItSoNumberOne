@@ -269,6 +269,14 @@ def run_one_conversation_cycle(
         print("  [main] No speech detected. Going back to sleep.")
         return True
 
+    # Always set, even to None, on every turn -- config is one shared
+    # dict reused for the whole run, so an old turn's identified
+    # speaker must never linger into a turn where identification found
+    # nothing (or wasn't attempted, e.g. no one's enrolled yet). See
+    # plugins/examples/journal_entry_plugin.py, the one consumer of
+    # this today.
+    config["_identified_speaker"] = _identify_speaker(audio_data)
+
     user_text = _transcribe_speech(audio_data, config)
     if not user_text:
         print("  [main] Could not transcribe. Going back to sleep.")
@@ -472,6 +480,21 @@ def _record_user_speech():
     # for 10 seconds, stop recording anyway. This returns the
     # raw audio data (as bytes) or None if nothing was heard.
     return audio.record_until_silence(timeout_seconds=10)
+
+
+def _identify_speaker(audio_data):
+    """Best-guess enrolled speaker for this turn's recording, or None
+    if nothing's enrolled yet (core.voice_id.identify() handles that
+    case cheaply, see its own docstring) or the match wasn't confident
+    enough. Never raises -- a voice-ID problem is not a reason to fail
+    the whole turn, same reasoning as every other best-effort step in
+    this loop (chime playback, TTS)."""
+    try:
+        from core import voice_id
+        return voice_id.identify(audio_data)
+    except Exception as exc:  # noqa: BLE001 -- best-effort, see docstring
+        print(f"  [main] Voice identification skipped: {exc}")
+        return None
 
 
 def _transcribe_speech(audio_data, config):

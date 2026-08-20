@@ -108,6 +108,21 @@ local, user-supplied code, same reasoning as `routines.yaml`; `desktop/plugins/e
 the one part of that directory that stays tracked, since it's a documented template rather than
 a personal plugin.
 
+**Two more worked examples, both real integrations, not toys:**
+
+- `desktop/plugins/examples/journal_entry_plugin.py` publishes voice-said journal entries to
+  [landonkea-soliloquy](../landonkea-soliloquy) over MQTT (QoS 1, a local retry buffer for when
+  the broker itself is unreachable, waits briefly for Soliloquy's own confirmation and reports
+  back what actually happened, not just "the publish call didn't raise"). Supports appending to
+  today's most recent entry ("also, one more thing...") instead of always starting a new one.
+- `desktop/plugins/examples/enroll_voice_plugin.py` + `desktop/core/voice_id.py` — pure-Python
+  (no numpy/ML framework) voice identification: pitch (autocorrelation) + loudness + zero-
+  crossing rate, averaged into a small fingerprint per enrolled name. "Computer, enroll my voice
+  as ..." saves one; `make_it_so.py`'s main loop then tries to identify who's speaking on every
+  turn and makes that available to other plugins via `config["_identified_speaker"]`, the
+  journal plugin above is the one consumer of it today. Real DSP, not a neural embedding model,
+  see that module's own docstring for the honest accuracy tradeoff that comes with that choice.
+
 ## Platform setup
 
 ### Desktop (Python)

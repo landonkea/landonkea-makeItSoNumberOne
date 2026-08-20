@@ -85,11 +85,20 @@ listed above:
   reminder, e.g. the words the user used to describe it). Use it when
   the user says a reminder is done / to check it off / to complete it.
 - "journal_entry" (params: text, what to save, transcribed from what
-  the user said). Use it when the user says something like "Computer,
-  journal entry: ..." or asks you to log/save/record a journal entry
-  or a thought. Requires the journal_entry plugin to be active (see
+  the user said; type, optional, "new" (default) or "append" -- use
+  "append" when the user is clearly adding to something they just
+  said a moment ago, e.g. "also, one more thing..." or "oh and I
+  forgot to mention", rather than starting a new, unrelated entry).
+  Use it when the user says something like "Computer, journal entry:
+  ..." or asks you to log/save/record a journal entry or a thought.
+  Requires the journal_entry plugin to be active (see
   desktop/plugins/examples/journal_entry_plugin.py) -- if it's not
   installed, this action's result will say so.
+- "enroll_voice" (params: name, whose voice this is). Use it when the
+  user says something like "Computer, enroll my voice as ..." or
+  "learn my voice" / "remember my voice as ...". Requires the
+  enroll_voice plugin to be active (see
+  desktop/plugins/examples/enroll_voice_plugin.py).
 
 Each of these returns its result as plain text that you should relay
 back to the user conversationally in a FUTURE turn (once you see the
